@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/workspace/benchmark.py", line 512, in <module>
+    main()
+  File "/workspace/benchmark.py", line 362, in main
+    logits = model(input_tokens)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1511, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1520, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/cs336_basics/model.py", line 253, in forward
+    x = layer(x)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1511, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1520, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/cs336_basics/model.py", line 382, in forward
+    x_attn = self.attn(self.ln1(x))
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1511, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1520, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/cs336_basics/model.py", line 520, in forward
+    attn_output = scaled_dot_product_attention(K=K, Q=Q, V=V, mask=causal_mask)
+  File "/workspace/cs336_basics/model.py", line 432, in scaled_dot_product_attention
+    attention_weights = softmax(attention_scores, dim=-1)  # Softmax over the key dimension
+  File "/workspace/cs336_basics/nn_utils.py", line 7, in softmax
+    return exponentiated_rescaled_input / torch.sum(exponentiated_rescaled_input, dim=dim, keepdim=True)
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 256.00 MiB. GPU 0 has a total capacity of 44.43 GiB of which 107.81 MiB is free. Including non-PyTorch memory, this process has 44.32 GiB memory in use. Of the allocated memory 43.36 GiB is allocated by PyTorch, and 668.00 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

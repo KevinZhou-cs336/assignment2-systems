@@ -1,0 +1,7 @@
+
+Mode:            full
+Forward:         126.40 ± 0.10 ms
+Backward:        275.39 ± 0.35 ms
+Optimizer step:  25.57 ± 0.68 ms
+Throughput:      9,584 tokens/s
+Peak GPU memory: 9.710 GB
