@@ -1,0 +1,1505 @@
+{
+  "small_ctx256_forward": {
+    "timing": {
+      "forward_ms": {
+        "mean": 22.13,
+        "std": 0.05
+      },
+      "peak_memory_gb": 2.927
+    },
+    "nvtx": {
+      "scaled dot product attention": {
+        "pct": 39.8,
+        "total_ns": 151266433,
+        "instances": 72
+      },
+      "benchmark": {
+        "pct": 21.0,
+        "total_ns": 79798738,
+        "instances": 1
+      },
+      "computing attention scores": {
+        "pct": 18.6,
+        "total_ns": 70553599,
+        "instances": 72
+      },
+      "computing softmax": {
+        "pct": 16.3,
+        "total_ns": 61915959,
+        "instances": 72
+      },
+      "final matmul": {
+        "pct": 4.3,
+        "total_ns": 16467934,
+        "instances": 72
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 510,
+        "kavg_ns": 135717.7,
+        "total_ns": 69216027.0,
+        "pct": 54.4
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 876,
+        "kavg_ns": 8521.3,
+        "total_ns": 7464658.8,
+        "pct": 5.9
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 144,
+        "kavg_ns": 46155.6,
+        "total_ns": 6646406.399999999,
+        "pct": 5.2
+      },
+      {
+        "name": "ampere_sgemm_128x128_nn",
+        "count": 72,
+        "kavg_ns": 69145.8,
+        "total_ns": 4978497.600000001,
+        "pct": 3.9
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 84,
+        "kavg_ns": 56869.0,
+        "total_ns": 4776996.0,
+        "pct": 3.8
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 78,
+        "kavg_ns": 53683.2,
+        "total_ns": 4187289.5999999996,
+        "pct": 3.3
+      },
+      {
+        "name": "ampere_sgemm_128x128_tn",
+        "count": 72,
+        "kavg_ns": 46301.2,
+        "total_ns": 3333686.4,
+        "pct": 2.6
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 72,
+        "kavg_ns": 45411.0,
+        "total_ns": 3269592.0,
+        "pct": 2.6
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 72,
+        "kavg_ns": 42944.8,
+        "total_ns": 3092025.6,
+        "pct": 2.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 432,
+        "kavg_ns": 6840.5,
+        "total_ns": 2955096.0,
+        "pct": 2.3
+      },
+      {
+        "name": "reduce(MaxOps)",
+        "count": 78,
+        "kavg_ns": 35282.4,
+        "total_ns": 2752027.2,
+        "pct": 2.2
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 72,
+        "kavg_ns": 37559.8,
+        "total_ns": 2704305.6,
+        "pct": 2.1
+      }
+    ]
+  },
+  "small_ctx256_full": {
+    "timing": {
+      "forward_ms": {
+        "mean": 21.99,
+        "std": 0.04
+      },
+      "backward_ms": {
+        "mean": 47.5,
+        "std": 0.12
+      },
+      "optimizer_ms": {
+        "mean": 24.97,
+        "std": 0.04
+      },
+      "peak_memory_gb": 2.455
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 60.5,
+        "total_ns": 329114085,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 20.0,
+        "total_ns": 108686192,
+        "instances": 72
+      },
+      "computing attention scores": {
+        "pct": 8.5,
+        "total_ns": 46459515,
+        "instances": 72
+      },
+      "computing softmax": {
+        "pct": 7.4,
+        "total_ns": 40174951,
+        "instances": 72
+      },
+      "final matmul": {
+        "pct": 3.6,
+        "total_ns": 19718369,
+        "instances": 72
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 510,
+        "kavg_ns": 135659.2,
+        "total_ns": 69186192.0,
+        "pct": 12.7
+      },
+      {
+        "name": "ampere_sgemm_128x64_nn",
+        "count": 504,
+        "kavg_ns": 121868.0,
+        "total_ns": 61421472.0,
+        "pct": 11.3
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 3996,
+        "kavg_ns": 13003.6,
+        "total_ns": 51962385.6,
+        "pct": 9.6
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 3096,
+        "kavg_ns": 16065.9,
+        "total_ns": 49740026.4,
+        "pct": 9.2
+      },
+      {
+        "name": "ampere_sgemm_128x64_nt",
+        "count": 360,
+        "kavg_ns": 93420.5,
+        "total_ns": 33631380.0,
+        "pct": 6.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1032,
+        "kavg_ns": 29082.8,
+        "total_ns": 30013449.599999998,
+        "pct": 5.5
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_",
+        "count": 144,
+        "kavg_ns": 190774.3,
+        "total_ns": 27471499.2,
+        "pct": 5.1
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 954,
+        "kavg_ns": 20954.0,
+        "total_ns": 19990116.0,
+        "pct": 3.7
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 942,
+        "kavg_ns": 17499.3,
+        "total_ns": 16484340.6,
+        "pct": 3.0
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 666,
+        "kavg_ns": 18552.8,
+        "total_ns": 12356164.799999999,
+        "pct": 2.3
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 216,
+        "kavg_ns": 48599.6,
+        "total_ns": 10497513.6,
+        "pct": 1.9
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 816,
+        "kavg_ns": 12225.1,
+        "total_ns": 9975681.6,
+        "pct": 1.8
+      }
+    ]
+  },
+  "small_ctx512_forward": {
+    "timing": {
+      "forward_ms": {
+        "mean": 49.91,
+        "std": 0.08
+      },
+      "peak_memory_gb": 6.422
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 39.3,
+        "total_ns": 153890842,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 30.6,
+        "total_ns": 120052282,
+        "instances": 72
+      },
+      "computing attention scores": {
+        "pct": 14.1,
+        "total_ns": 55088185,
+        "instances": 72
+      },
+      "computing softmax": {
+        "pct": 12.2,
+        "total_ns": 47747076,
+        "instances": 72
+      },
+      "final matmul": {
+        "pct": 3.8,
+        "total_ns": 14954221,
+        "instances": 72
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 510,
+        "kavg_ns": 252248.0,
+        "total_ns": 128646480.0,
+        "pct": 43.6
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 876,
+        "kavg_ns": 20832.5,
+        "total_ns": 18249270.0,
+        "pct": 6.2
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 84,
+        "kavg_ns": 192052.9,
+        "total_ns": 16132443.6,
+        "pct": 5.5
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 78,
+        "kavg_ns": 187306.5,
+        "total_ns": 14609907.0,
+        "pct": 5.0
+      },
+      {
+        "name": "ampere_sgemm_128x128_nn",
+        "count": 72,
+        "kavg_ns": 197758.9,
+        "total_ns": 14238640.799999999,
+        "pct": 4.8
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 144,
+        "kavg_ns": 90198.7,
+        "total_ns": 12988612.799999999,
+        "pct": 4.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 72,
+        "kavg_ns": 179124.5,
+        "total_ns": 12896964.0,
+        "pct": 4.4
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 72,
+        "kavg_ns": 174498.6,
+        "total_ns": 12563899.200000001,
+        "pct": 4.3
+      },
+      {
+        "name": "ampere_sgemm_128x128_tn",
+        "count": 72,
+        "kavg_ns": 151702.5,
+        "total_ns": 10922580.0,
+        "pct": 3.7
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 72,
+        "kavg_ns": 140100.2,
+        "total_ns": 10087214.4,
+        "pct": 3.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 432,
+        "kavg_ns": 19461.2,
+        "total_ns": 8407238.4,
+        "pct": 2.8
+      },
+      {
+        "name": "reduce(MaxOps)",
+        "count": 78,
+        "kavg_ns": 102480.0,
+        "total_ns": 7993440.0,
+        "pct": 2.7
+      }
+    ]
+  },
+  "small_ctx512_full": {
+    "timing": {
+      "forward_ms": {
+        "mean": 49.72,
+        "std": 0.02
+      },
+      "backward_ms": {
+        "mean": 105.13,
+        "std": 0.14
+      },
+      "optimizer_ms": {
+        "mean": 25.11,
+        "std": 0.03
+      },
+      "peak_memory_gb": 4.249
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 74.8,
+        "total_ns": 552737486,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 12.7,
+        "total_ns": 94013748,
+        "instances": 72
+      },
+      "computing attention scores": {
+        "pct": 5.9,
+        "total_ns": 43795223,
+        "instances": 72
+      },
+      "computing softmax": {
+        "pct": 4.5,
+        "total_ns": 33588266,
+        "instances": 72
+      },
+      "final matmul": {
+        "pct": 2.0,
+        "total_ns": 14604183,
+        "instances": 72
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 510,
+        "kavg_ns": 251943.2,
+        "total_ns": 128491032.0,
+        "pct": 12.2
+      },
+      {
+        "name": "ampere_sgemm_128x64_nn",
+        "count": 504,
+        "kavg_ns": 225710.4,
+        "total_ns": 113758041.6,
+        "pct": 10.8
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_",
+        "count": 504,
+        "kavg_ns": 218654.9,
+        "total_ns": 110202069.6,
+        "pct": 10.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1032,
+        "kavg_ns": 77107.3,
+        "total_ns": 79574733.60000001,
+        "pct": 7.5
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 3096,
+        "kavg_ns": 17818.7,
+        "total_ns": 55166695.2,
+        "pct": 5.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 3996,
+        "kavg_ns": 13006.3,
+        "total_ns": 51973174.8,
+        "pct": 4.9
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 954,
+        "kavg_ns": 53626.4,
+        "total_ns": 51159585.6,
+        "pct": 4.8
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 216,
+        "kavg_ns": 181198.2,
+        "total_ns": 39138811.2,
+        "pct": 3.7
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 162,
+        "kavg_ns": 191145.6,
+        "total_ns": 30965587.2,
+        "pct": 2.9
+      },
+      {
+        "name": "ampere_sgemm_128x128_nt",
+        "count": 144,
+        "kavg_ns": 184624.2,
+        "total_ns": 26585884.8,
+        "pct": 2.5
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 942,
+        "kavg_ns": 23636.8,
+        "total_ns": 22265865.599999998,
+        "pct": 2.1
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 876,
+        "kavg_ns": 20833.5,
+        "total_ns": 18250146.0,
+        "pct": 1.7
+      }
+    ]
+  },
+  "small_ctx1024_forward": {
+    "timing": {
+      "forward_ms": {
+        "mean": 126.47,
+        "std": 0.1
+      },
+      "peak_memory_gb": 16.971
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 62.0,
+        "total_ns": 381878015,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 19.2,
+        "total_ns": 118092776,
+        "instances": 72
+      },
+      "computing softmax": {
+        "pct": 8.4,
+        "total_ns": 52060294,
+        "instances": 72
+      },
+      "computing attention scores": {
+        "pct": 8.1,
+        "total_ns": 50104551,
+        "instances": 72
+      },
+      "final matmul": {
+        "pct": 2.3,
+        "total_ns": 14100690,
+        "instances": 72
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 510,
+        "kavg_ns": 473603.2,
+        "total_ns": 241537632.0,
+        "pct": 32.0
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 84,
+        "kavg_ns": 692419.3,
+        "total_ns": 58163221.2,
+        "pct": 7.7
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 78,
+        "kavg_ns": 699710.3,
+        "total_ns": 54577403.400000006,
+        "pct": 7.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 72,
+        "kavg_ns": 710677.3,
+        "total_ns": 51168765.6,
+        "pct": 6.8
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 72,
+        "kavg_ns": 710164.5,
+        "total_ns": 51131844.0,
+        "pct": 6.8
+      },
+      {
+        "name": "ampere_sgemm_128x128_nn",
+        "count": 72,
+        "kavg_ns": 629585.9,
+        "total_ns": 45330184.800000004,
+        "pct": 6.0
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 72,
+        "kavg_ns": 619817.9,
+        "total_ns": 44626888.800000004,
+        "pct": 5.9
+      },
+      {
+        "name": "ampere_sgemm_128x128_tn",
+        "count": 72,
+        "kavg_ns": 485675.9,
+        "total_ns": 34968664.800000004,
+        "pct": 4.6
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 876,
+        "kavg_ns": 39701.1,
+        "total_ns": 34778163.6,
+        "pct": 4.6
+      },
+      {
+        "name": "reduce(MaxOps)",
+        "count": 78,
+        "kavg_ns": 350250.3,
+        "total_ns": 27319523.4,
+        "pct": 3.6
+      },
+      {
+        "name": "reduce(...)",
+        "count": 78,
+        "kavg_ns": 346019.2,
+        "total_ns": 26989497.6,
+        "pct": 3.6
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 144,
+        "kavg_ns": 178762.3,
+        "total_ns": 25741771.2,
+        "pct": 3.4
+      }
+    ]
+  },
+  "small_ctx1024_full": {
+    "timing": {
+      "forward_ms": {
+        "mean": 126.4,
+        "std": 0.1
+      },
+      "backward_ms": {
+        "mean": 275.39,
+        "std": 0.35
+      },
+      "optimizer_ms": {
+        "mean": 25.57,
+        "std": 0.68
+      },
+      "peak_memory_gb": 9.71
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 86.7,
+        "total_ns": 1302826447,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 6.7,
+        "total_ns": 101475920,
+        "instances": 72
+      },
+      "computing attention scores": {
+        "pct": 3.1,
+        "total_ns": 47127788,
+        "instances": 72
+      },
+      "computing softmax": {
+        "pct": 2.4,
+        "total_ns": 35569188,
+        "instances": 72
+      },
+      "final matmul": {
+        "pct": 1.1,
+        "total_ns": 16456757,
+        "instances": 72
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 510,
+        "kavg_ns": 473635.2,
+        "total_ns": 241553952.0,
+        "pct": 9.5
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1032,
+        "kavg_ns": 227534.3,
+        "total_ns": 234815397.6,
+        "pct": 9.3
+      },
+      {
+        "name": "ampere_sgemm_128x64_nn",
+        "count": 504,
+        "kavg_ns": 438962.0,
+        "total_ns": 221236848.0,
+        "pct": 8.7
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 216,
+        "kavg_ns": 716074.5,
+        "total_ns": 154672092.0,
+        "pct": 6.1
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 954,
+        "kavg_ns": 150333.5,
+        "total_ns": 143418159.0,
+        "pct": 5.7
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x256",
+        "count": 150,
+        "kavg_ns": 827743.1,
+        "total_ns": 124161465.0,
+        "pct": 4.9
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_",
+        "count": 360,
+        "kavg_ns": 317855.1,
+        "total_ns": 114427835.99999999,
+        "pct": 4.5
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 162,
+        "kavg_ns": 695226.0,
+        "total_ns": 112626612.0,
+        "pct": 4.4
+      },
+      {
+        "name": "ampere_sgemm_128x128_nt",
+        "count": 144,
+        "kavg_ns": 593428.3,
+        "total_ns": 85453675.2,
+        "pct": 3.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 3096,
+        "kavg_ns": 21388.2,
+        "total_ns": 66217867.2,
+        "pct": 2.6
+      },
+      {
+        "name": "reduce(...)",
+        "count": 306,
+        "kavg_ns": 192209.8,
+        "total_ns": 58816198.8,
+        "pct": 2.3
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 84,
+        "kavg_ns": 692306.4,
+        "total_ns": 58153737.6,
+        "pct": 2.3
+      }
+    ]
+  },
+  "medium_ctx256_forward": {
+    "timing": {
+      "forward_ms": {
+        "mean": 63.63,
+        "std": 0.5
+      },
+      "peak_memory_gb": 7.384
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 41.1,
+        "total_ns": 195700885,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 29.9,
+        "total_ns": 142181000,
+        "instances": 144
+      },
+      "computing attention scores": {
+        "pct": 13.6,
+        "total_ns": 64654561,
+        "instances": 144
+      },
+      "computing softmax": {
+        "pct": 10.7,
+        "total_ns": 51068314,
+        "instances": 144
+      },
+      "final matmul": {
+        "pct": 4.8,
+        "total_ns": 22622974,
+        "instances": 144
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 1014,
+        "kavg_ns": 216275.1,
+        "total_ns": 219302951.4,
+        "pct": 59.5
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 1740,
+        "kavg_ns": 13117.9,
+        "total_ns": 22825146.0,
+        "pct": 6.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 288,
+        "kavg_ns": 60856.6,
+        "total_ns": 17526700.8,
+        "pct": 4.8
+      },
+      {
+        "name": "ampere_sgemm_128x128_nn",
+        "count": 144,
+        "kavg_ns": 74950.4,
+        "total_ns": 10792857.6,
+        "pct": 2.9
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 156,
+        "kavg_ns": 63995.2,
+        "total_ns": 9983251.2,
+        "pct": 2.7
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 150,
+        "kavg_ns": 64214.3,
+        "total_ns": 9632145.0,
+        "pct": 2.6
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 864,
+        "kavg_ns": 10586.0,
+        "total_ns": 9146304.0,
+        "pct": 2.5
+      },
+      {
+        "name": "ampere_sgemm_128x128_tn",
+        "count": 144,
+        "kavg_ns": 62341.6,
+        "total_ns": 8977190.4,
+        "pct": 2.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 144,
+        "kavg_ns": 60761.4,
+        "total_ns": 8749641.6,
+        "pct": 2.4
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 144,
+        "kavg_ns": 57784.9,
+        "total_ns": 8321025.600000001,
+        "pct": 2.3
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 144,
+        "kavg_ns": 49173.1,
+        "total_ns": 7080926.399999999,
+        "pct": 1.9
+      },
+      {
+        "name": "reduce(MaxOps)",
+        "count": 150,
+        "kavg_ns": 42313.3,
+        "total_ns": 6346995.0,
+        "pct": 1.7
+      }
+    ]
+  },
+  "medium_ctx256_full": {
+    "timing": {
+      "forward_ms": {
+        "mean": 62.07,
+        "std": 0.13
+      },
+      "backward_ms": {
+        "mean": 134.91,
+        "std": 0.39
+      },
+      "optimizer_ms": {
+        "mean": 81.21,
+        "std": 0.07
+      },
+      "peak_memory_gb": 6.765
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 74.0,
+        "total_ns": 858400211,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 13.2,
+        "total_ns": 152867542,
+        "instances": 144
+      },
+      "computing attention scores": {
+        "pct": 6.0,
+        "total_ns": 69048726,
+        "instances": 144
+      },
+      "computing softmax": {
+        "pct": 4.6,
+        "total_ns": 53040911,
+        "instances": 144
+      },
+      "final matmul": {
+        "pct": 2.3,
+        "total_ns": 26449965,
+        "instances": 144
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 1014,
+        "kavg_ns": 215184.4,
+        "total_ns": 218196981.6,
+        "pct": 13.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 6120,
+        "kavg_ns": 27676.0,
+        "total_ns": 169377120.0,
+        "pct": 10.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 7884,
+        "kavg_ns": 21132.4,
+        "total_ns": 166607841.60000002,
+        "pct": 10.2
+      },
+      {
+        "name": "ampere_sgemm_128x64_nn",
+        "count": 864,
+        "kavg_ns": 185045.4,
+        "total_ns": 159879225.6,
+        "pct": 9.8
+      },
+      {
+        "name": "ampere_sgemm_128x64_nt",
+        "count": 432,
+        "kavg_ns": 311350.1,
+        "total_ns": 134503243.2,
+        "pct": 8.3
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 2040,
+        "kavg_ns": 39415.7,
+        "total_ns": 80408028.0,
+        "pct": 4.9
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_",
+        "count": 576,
+        "kavg_ns": 118675.5,
+        "total_ns": 68357088.0,
+        "pct": 4.2
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 1878,
+        "kavg_ns": 27249.7,
+        "total_ns": 51174936.6,
+        "pct": 3.1
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1890,
+        "kavg_ns": 26440.4,
+        "total_ns": 49972356.0,
+        "pct": 3.1
+      },
+      {
+        "name": "ampere_sgemm_64x64_nn",
+        "count": 144,
+        "kavg_ns": 331107.8,
+        "total_ns": 47679523.199999996,
+        "pct": 2.9
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1314,
+        "kavg_ns": 30766.1,
+        "total_ns": 40426655.4,
+        "pct": 2.5
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1608,
+        "kavg_ns": 19955.0,
+        "total_ns": 32087640.0,
+        "pct": 2.0
+      }
+    ]
+  },
+  "medium_ctx512_forward": {
+    "timing": {
+      "forward_ms": {
+        "mean": 144.67,
+        "std": 0.17
+      },
+      "peak_memory_gb": 16.581
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 56.4,
+        "total_ns": 443296307,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 22.1,
+        "total_ns": 173684624,
+        "instances": 144
+      },
+      "computing attention scores": {
+        "pct": 10.0,
+        "total_ns": 78470351,
+        "instances": 144
+      },
+      "computing softmax": {
+        "pct": 8.0,
+        "total_ns": 62987945,
+        "instances": 144
+      },
+      "final matmul": {
+        "pct": 3.5,
+        "total_ns": 27844981,
+        "instances": 144
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 1014,
+        "kavg_ns": 426224.4,
+        "total_ns": 432191541.6,
+        "pct": 50.3
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 1740,
+        "kavg_ns": 27150.8,
+        "total_ns": 47242392.0,
+        "pct": 5.5
+      },
+      {
+        "name": "ampere_sgemm_128x128_nn",
+        "count": 144,
+        "kavg_ns": 266505.1,
+        "total_ns": 38376734.4,
+        "pct": 4.5
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 156,
+        "kavg_ns": 239675.4,
+        "total_ns": 37389362.4,
+        "pct": 4.3
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 150,
+        "kavg_ns": 239939.6,
+        "total_ns": 35990940.0,
+        "pct": 4.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 288,
+        "kavg_ns": 120466.1,
+        "total_ns": 34694236.800000004,
+        "pct": 4.0
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 144,
+        "kavg_ns": 238025.4,
+        "total_ns": 34275657.6,
+        "pct": 4.0
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 144,
+        "kavg_ns": 234253.2,
+        "total_ns": 33732460.800000004,
+        "pct": 3.9
+      },
+      {
+        "name": "ampere_sgemm_128x128_tn",
+        "count": 144,
+        "kavg_ns": 195133.2,
+        "total_ns": 28099180.8,
+        "pct": 3.3
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 144,
+        "kavg_ns": 185547.7,
+        "total_ns": 26718868.8,
+        "pct": 3.1
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 864,
+        "kavg_ns": 27482.3,
+        "total_ns": 23744707.2,
+        "pct": 2.8
+      },
+      {
+        "name": "reduce(MaxOps)",
+        "count": 150,
+        "kavg_ns": 128417.0,
+        "total_ns": 19262550.0,
+        "pct": 2.2
+      }
+    ]
+  },
+  "medium_ctx512_full": {
+    "timing": {
+      "forward_ms": {
+        "mean": 144.07,
+        "std": 0.16
+      },
+      "backward_ms": {
+        "mean": 301.05,
+        "std": 0.28
+      },
+      "optimizer_ms": {
+        "mean": 81.21,
+        "std": 0.03
+      },
+      "peak_memory_gb": 11.403
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 78.1,
+        "total_ns": 1597889164,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 11.0,
+        "total_ns": 225967321,
+        "instances": 144
+      },
+      "computing attention scores": {
+        "pct": 5.3,
+        "total_ns": 108070211,
+        "instances": 144
+      },
+      "computing softmax": {
+        "pct": 4.5,
+        "total_ns": 91498296,
+        "instances": 144
+      },
+      "final matmul": {
+        "pct": 1.1,
+        "total_ns": 22834376,
+        "instances": 144
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 1014,
+        "kavg_ns": 425483.2,
+        "total_ns": 431439964.8,
+        "pct": 13.9
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_",
+        "count": 864,
+        "kavg_ns": 340067.2,
+        "total_ns": 293818060.8,
+        "pct": 9.5
+      },
+      {
+        "name": "ampere_sgemm_128x64_nn",
+        "count": 720,
+        "kavg_ns": 311157.9,
+        "total_ns": 224033688.00000003,
+        "pct": 7.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 2040,
+        "kavg_ns": 103642.8,
+        "total_ns": 211431312.0,
+        "pct": 6.8
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 6120,
+        "kavg_ns": 30048.0,
+        "total_ns": 183893760.0,
+        "pct": 5.9
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_256x128",
+        "count": 294,
+        "kavg_ns": 600077.2,
+        "total_ns": 176422696.79999998,
+        "pct": 5.7
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 7884,
+        "kavg_ns": 21104.7,
+        "total_ns": 166389454.8,
+        "pct": 5.4
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1890,
+        "kavg_ns": 68240.0,
+        "total_ns": 128973600.0,
+        "pct": 4.2
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 432,
+        "kavg_ns": 240734.2,
+        "total_ns": 103997174.4,
+        "pct": 3.3
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_256x128",
+        "count": 150,
+        "kavg_ns": 680208.2,
+        "total_ns": 102031230.0,
+        "pct": 3.3
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 306,
+        "kavg_ns": 240782.9,
+        "total_ns": 73679567.39999999,
+        "pct": 2.4
+      },
+      {
+        "name": "ampere_sgemm_128x128_nt",
+        "count": 288,
+        "kavg_ns": 247070.1,
+        "total_ns": 71156188.8,
+        "pct": 2.3
+      }
+    ]
+  },
+  "medium_ctx1024_forward": {
+    "timing": {
+      "oom": true
+    },
+    "nvtx": {
+      "scaled dot product attention": {
+        "pct": 50.2,
+        "total_ns": 208762811,
+        "instances": 48
+      },
+      "computing softmax": {
+        "pct": 26.6,
+        "total_ns": 110807373,
+        "instances": 48
+      },
+      "computing attention scores": {
+        "pct": 20.1,
+        "total_ns": 83618263,
+        "instances": 48
+      },
+      "final matmul": {
+        "pct": 3.1,
+        "total_ns": 12692604,
+        "instances": 47
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 333,
+        "kavg_ns": 784193.9,
+        "total_ns": 261136568.70000002,
+        "pct": 37.2
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 50,
+        "kavg_ns": 933569.3,
+        "total_ns": 46678465.0,
+        "pct": 6.6
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 49,
+        "kavg_ns": 939248.2,
+        "total_ns": 46023161.8,
+        "pct": 6.6
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 48,
+        "kavg_ns": 947965.1,
+        "total_ns": 45502324.8,
+        "pct": 6.5
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 47,
+        "kavg_ns": 946221.3,
+        "total_ns": 44472401.1,
+        "pct": 6.3
+      },
+      {
+        "name": "ampere_sgemm_128x128_nn",
+        "count": 47,
+        "kavg_ns": 884305.6,
+        "total_ns": 41562363.199999996,
+        "pct": 5.9
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 48,
+        "kavg_ns": 826271.6,
+        "total_ns": 39661036.8,
+        "pct": 5.6
+      },
+      {
+        "name": "ampere_sgemm_128x128_tn",
+        "count": 48,
+        "kavg_ns": 645296.6,
+        "total_ns": 30974236.799999997,
+        "pct": 4.4
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 576,
+        "kavg_ns": 51812.3,
+        "total_ns": 29843884.8,
+        "pct": 4.3
+      },
+      {
+        "name": "reduce(MaxOps)",
+        "count": 49,
+        "kavg_ns": 466162.8,
+        "total_ns": 22841977.2,
+        "pct": 3.3
+      },
+      {
+        "name": "reduce(...)",
+        "count": 49,
+        "kavg_ns": 461213.9,
+        "total_ns": 22599481.1,
+        "pct": 3.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 94,
+        "kavg_ns": 239739.1,
+        "total_ns": 22535475.400000002,
+        "pct": 3.2
+      }
+    ]
+  },
+  "medium_ctx1024_full": {
+    "timing": {
+      "forward_ms": {
+        "mean": 359.6,
+        "std": 0.55
+      },
+      "backward_ms": {
+        "mean": 769.15,
+        "std": 1.29
+      },
+      "optimizer_ms": {
+        "mean": 81.28,
+        "std": 0.1
+      },
+      "peak_memory_gb": 25.452
+    },
+    "nvtx": {
+      "benchmark": {
+        "pct": 90.1,
+        "total_ns": 3654879302,
+        "instances": 1
+      },
+      "scaled dot product attention": {
+        "pct": 5.0,
+        "total_ns": 202718335,
+        "instances": 144
+      },
+      "computing attention scores": {
+        "pct": 2.3,
+        "total_ns": 92690604,
+        "instances": 144
+      },
+      "computing softmax": {
+        "pct": 1.9,
+        "total_ns": 78862030,
+        "instances": 144
+      },
+      "final matmul": {
+        "pct": 0.7,
+        "total_ns": 26696456,
+        "instances": 144
+      }
+    },
+    "top_kernels": [
+      {
+        "name": "ampere_sgemm_128x64_tn",
+        "count": 1014,
+        "kavg_ns": 800940.8,
+        "total_ns": 812153971.2,
+        "pct": 11.3
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 2040,
+        "kavg_ns": 306535.9,
+        "total_ns": 625333236.0,
+        "pct": 8.7
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x256",
+        "count": 438,
+        "kavg_ns": 1270152.9,
+        "total_ns": 556326970.1999999,
+        "pct": 7.7
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_256x128",
+        "count": 438,
+        "kavg_ns": 1125303.1,
+        "total_ns": 492882757.8,
+        "pct": 6.8
+      },
+      {
+        "name": "elementwise_kernel",
+        "count": 432,
+        "kavg_ns": 953167.5,
+        "total_ns": 411768360.0,
+        "pct": 5.7
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 1890,
+        "kavg_ns": 192987.5,
+        "total_ns": 364746375.0,
+        "pct": 5.1
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 306,
+        "kavg_ns": 925017.7,
+        "total_ns": 283055416.2,
+        "pct": 3.9
+      },
+      {
+        "name": "ampere_sgemm_128x64_nn",
+        "count": 576,
+        "kavg_ns": 450111.8,
+        "total_ns": 259264396.79999998,
+        "pct": 3.6
+      },
+      {
+        "name": "ampere_sgemm_128x128_nt",
+        "count": 288,
+        "kavg_ns": 830996.5,
+        "total_ns": 239326992.0,
+        "pct": 3.3
+      },
+      {
+        "name": "void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_",
+        "count": 576,
+        "kavg_ns": 399726.5,
+        "total_ns": 230242464.0,
+        "pct": 3.2
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 6120,
+        "kavg_ns": 34600.2,
+        "total_ns": 211753223.99999997,
+        "pct": 2.9
+      },
+      {
+        "name": "vec_elem(vectorized_elementwise_)",
+        "count": 7884,
+        "kavg_ns": 21100.0,
+        "total_ns": 166352400.0,
+        "pct": 2.3
+      }
+    ]
+  }
+}

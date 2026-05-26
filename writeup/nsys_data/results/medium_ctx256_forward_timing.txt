@@ -1,0 +1,5 @@
+
+Mode:            forward
+Forward:         63.63 ± 0.50 ms
+Throughput:      16,093 tokens/s
+Peak GPU memory: 7.384 GB

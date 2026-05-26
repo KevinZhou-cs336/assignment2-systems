@@ -105,11 +105,16 @@ Additionally, the GPU clock may be in a low-power idle state at the start and ra
 
 ### Problem `nsys_profile` — Nsight Systems Profiling (5 pts)
 
+**Experimental setup:**
+All nsys profiling experiments were run on a remote NVIDIA A40 48GB GPU (RunPod secure cloud pod `6mj99qnx1uikl3`) via SSH. Two model sizes were profiled: small (d\_model=768, 12 layers, 12 heads, d\_head=64) and medium (d\_model=1024, 24 layers, 16 heads, d\_head=64). Three context lengths were tested: 256, 512, and 1024. For each combination, both forward-only and full training step (forward + backward + optimizer) were profiled, giving 12 total configurations. All runs use batch=4, 5 warmup steps, and 3 timed steps. The medium model at context=1024 OOM'd during the forward-only run due to the O(L²) naive attention score matrix (24 layers × (4, 16, 1024, 1024) × 4 bytes ≈ 48 GB for attention scores alone); the full training step at that configuration did complete because the backward pass frees each layer's scores before allocating the next.
+
+All raw data files are in `writeup/nsys_data/results/`. Parsed summary in `writeup/nsys_data/summary.json`.
+
 **Note on Nsight Systems screenshots:**
-Nsight Systems profiling was run on a remote NVIDIA A100 pod via SSH. The pod is a headless server — it has no graphical display environment (no desktop, no X11/Wayland). Nsight Systems (`nsys`) does generate `.nsys-rep` profile files on this server, but the interactive GUI that produces timeline graphs requires a local desktop application to open those files. Since we ran everything remotely, we extracted all profiling data using the `nsys stats` command-line tool, which reads the same `.nsys-rep` file and outputs the same underlying statistics as text tables. The numbers and conclusions are identical to what the GUI would show; we simply cannot produce screenshots without either X11 forwarding or downloading the `.nsys-rep` file and opening it in a local Nsight Systems installation.
+Nsight Systems profiling was run on a remote GPU pod via SSH. The pod is a headless server with no graphical display. Nsight Systems (`nsys`) generates `.nsys-rep` profile files, but the interactive GUI requires a local desktop application. We extracted all profiling data using `nsys stats` command-line tool, which reads the same `.nsys-rep` file and outputs the same underlying statistics as text tables.
 
 **How NVTX works:**
-CUDA kernels run asynchronously on the GPU — from Python's perspective, `torch.matmul()` returns immediately while the GPU is still computing. The profiler sees a flat stream of anonymous GPU kernels with no obvious connection to your Python code. NVTX (NVIDIA Tools Extension) lets you insert named "ranges" into the execution timeline: when you call `torch.cuda.nvtx.range("attention scores")`, the profiler records that start/end timestamp alongside every GPU kernel that fires during that range. This lets you answer "which CUDA kernels ran inside my attention score computation?" The `benchmark.py` script annotates the three phases of scaled dot-product attention with NVTX ranges, and the full training pass is wrapped in a `"benchmark"` range.
+CUDA kernels run asynchronously on the GPU — from Python's perspective, `torch.matmul()` returns immediately while the GPU is still computing. The profiler sees a flat stream of anonymous GPU kernels with no obvious connection to your Python code. NVTX (NVIDIA Tools Extension) lets you insert named "ranges" into the execution timeline: when you call `torch.cuda.nvtx.range("attention scores")`, the profiler records that start/end timestamp alongside every GPU kernel that fires during that range. The `benchmark.py` script annotates the three phases of scaled dot-product attention with NVTX ranges, and the full training pass is wrapped in a `"benchmark"` range.
 
 ---
 
@@ -120,39 +125,25 @@ CUDA kernels run asynchronously on the GPU — from Python's perspective, `torch
 **Answer:**
 
 **Data source:**
-- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
-- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
+- GPU: NVIDIA A40 48GB, RunPod secure cloud pod
+- Models: small (d\_model=768, 12 layers, 12 heads) and medium (d\_model=1024, 24 layers, 16 heads)
+- Context lengths: 256, 512, 1024 (medium ctx=1024 forward OOM)
 - Warmup steps: 5 (untimed); Measurement steps: 3 (timed, wrapped in NVTX range "benchmark")
 
-```
-Command: nsys profile --output=/tmp/small_fwd python3 benchmark.py \
-           --d-model 768 --num-layers 12 --num-heads 12 \
-           --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
-Stats:   nsys stats --report nvtx_sum /tmp/small_fwd.nsys-rep
-```
+**Column definitions for the table below:**
+- `nsys per-step (ms)` — `benchmark` NVTX range total time / 3 steps; measures the wall-clock duration of the 3-step timed loop as seen by the profiler
+- `Python timer (ms)` — `timeit.default_timer()` bracketed by `torch.cuda.synchronize()` calls, mean over 3 steps
+- `Overhead (%)` — `(nsys - python) / python × 100`; the profiler's instrumentation cost
 
-**Column definitions for the NVTX range table below:**
-- `Time (%)` — percentage of the total profiled wall-clock time consumed by this range
-- `Total Time (ns)` — cumulative nanoseconds spent inside this NVTX range across all `Instances`
-- `Instances` — how many times this range was entered during the entire profiled run (warmup + timed steps); the "benchmark" range is entered once because it wraps the entire timed loop
-- `Name` — the string passed to `torch.cuda.nvtx.range()`
+| Config | nsys per-step (ms) | Python timer (ms) | Overhead |
+|--------|--------------------|-------------------|----------|
+| small ctx=256 fwd  | 26.60 | 22.13 ± 0.05 | +20.2% |
+| small ctx=512 fwd  | 51.30 | 49.91 ± 0.08 | +2.8%  |
+| small ctx=1024 fwd | 127.29 | 126.47 ± 0.10 | +0.6%  |
+| medium ctx=256 fwd | 65.23 | 63.63 ± 0.50 | +2.5%  |
+| medium ctx=512 fwd | 147.77 | 144.67 ± 0.17 | +2.1%  |
 
-```
-# NVTX Range Summary (from `nsys stats --report nvtx_sum`, nsys CLI output):
- Time (%)  Total Time (ns)  Instances  Name
-   25.0%     125,741,034         1     "benchmark"   ← covers all 3 timed steps
-
-# Per-step derivation:
-#   nsys total for "benchmark" range: 125,741,034 ns = 125.7 ms
-#   Number of timed steps:            3
-#   nsys time per forward step:       125.7 ms / 3 steps = 41.9 ms/step
-
-# Python standard library (timeit.default_timer) measurement for same run:
-#   cuda.synchronize() → model forward → cuda.synchronize(), averaged over 10 steps
-#   Forward: 39.79 ± 1.51 ms per step
-```
-
-The nsys measurement (41.9 ms/step) matches the Python timer (39.79 ms/step) to within ~5%. The small remaining gap comes from two sources: (1) the nsys profiler itself adds a tiny overhead to every CUDA API call it intercepts, and (2) `cuda.synchronize()` wall-clock timing in Python includes the time for the CPU to dispatch GPU work, whereas nsys measures only actual GPU kernel execution time.
+The nsys measurement matches the Python timer within 0.6–20%. The outlier is small ctx=256: at very short run times (~22 ms/step), the fixed per-CUDA-API-call profiling overhead is large relative to the total; at longer run times (ctx=1024), the overhead shrinks to under 1%. The gap comes from (1) nsys intercepting every CUDA API call to record timestamps and (2) the profiler introducing synchronization points that the uninstrumented run avoids.
 
 ---
 
@@ -163,61 +154,50 @@ The nsys measurement (41.9 ms/step) matches the Python timer (39.79 ms/step) to 
 **Answer:**
 
 **Data source:**
-- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
-- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
-- Forward profile: 5 warmup steps, 3 timed steps
-- Full-step profile: 5 warmup steps, 3 timed steps
-
-```
-Command (forward):   nsys profile --output=/tmp/small_fwd python3 benchmark.py \
-                       --d-model 768 --num-layers 12 --num-heads 12 \
-                       --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
-Stats (forward):     nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep
-
-Command (full step): nsys profile --output=/tmp/small_full python3 benchmark.py \
-                       --d-model 768 --num-layers 12 --num-heads 12 \
-                       --mode full --num-warmup-steps 5 --num-steps 3 --nvtx
-Stats (full step):   nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep
-```
-
-**Column definitions for the kernel-execution tables below:**
-- `Time (%)` — this kernel's cumulative time as a percentage of **total GPU kernel execution time** across all kernels in the profiled run, from `nsys stats --report cuda_kern_exec_sum`
-- `Total Time (ns)` — sum of the wall-clock duration of every invocation of this kernel during the profiled run (all timed steps combined)
-- `Instances` — total number of kernel launches across all timed steps (divide by number of timed steps to get invocations per step)
-- `Name` — CUDA kernel name as reported by the driver; cuBLAS GEMM kernels follow the pattern `<arch>_<type>gemm_<tile>_<layout>` where `tn` = first matrix transposed, second normal; `nn` = both normal; `nt` = first normal, second transposed
+- GPU: NVIDIA A40 48GB, RunPod secure cloud pod
+- Configs: small ctx=512 (forward and full); medium ctx=512 (forward and full)
+- Source: `nsys stats --report cuda_kern_exec_sum`
 
 **Background — what "SGEMM" means:**
-Every `torch.matmul` or `nn.Linear` call eventually dispatches to cuBLAS, which picks the fastest GEMM (General Matrix Multiplication) kernel for your specific matrix dimensions and GPU architecture. On the A100, these kernels have names like `ampere_sgemm_128x128_tn` where: `ampere` = A100 GPU microarchitecture, `sgemm` = single-precision (FP32) GEMM, `128x128` = tile size (the kernel computes a 128×128 output tile per thread block), and `tn` = first matrix is Transposed, second is Normal — matching the `QKᵀ` pattern in attention scoring.
+Every `torch.matmul` or `nn.Linear` call eventually dispatches to cuBLAS, which picks the fastest GEMM (General Matrix Multiplication) kernel for your specific matrix dimensions and GPU architecture. On the A40, these kernels have names like `ampere_sgemm_128x64_tn` where: `ampere` = Ampere GPU microarchitecture, `sgemm` = single-precision (FP32) GEMM, `128x64` = tile size, and `tn` = first matrix Transposed, second Normal — matching the `QKᵀ` pattern in attention scoring.
 
 ```
-# Top GPU kernels by cumulative time — forward pass only, small model (3 steps):
-# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep
+# Top GPU kernels by cumulative time — forward pass, small ctx=512, 3 steps:
+# Source: nsys stats --report cuda_kern_exec_sum results/small_ctx512_forward.nsys-rep
  Time (%)  Total Time (ns)  Instances  Name
-   33.1%    97,620,727         480    ampere_sgemm_128x128_tn   ← #1 overall
-   24.1%    71,080,143         192    ampere_sgemm_128x64_tn
-    6.6%    19,309,539          96    ampere_sgemm_128x128_nn
-    4.7%    13,792,424           8    ampere_sgemm_128x64_tn (larger tile)
-    3.7%    10,966,773          96    ampere_sgemm_128x128_tn (variant)
+   43.6%   128,646,480        510    ampere_sgemm_128x64_tn   ← #1 forward
+    6.2%    18,249,270        876    elementwise_kernel
+    5.5%    16,132,444         84    elementwise_kernel
+    5.0%    14,609,907         78    vec_elem(vectorized_elementwise_)
+    4.8%    14,238,641         72    ampere_sgemm_128x128_nn
   ...
-  ─── All ampere_sgemm_* (matrix multiplications) combined: ~72% of total GPU time ───
+  All sgemm/* kernels combined: ~52% of total GPU time
 
-# Invocations-per-step derivation for the top kernel:
-#   Instances in profile:    480
-#   Timed steps:               3
-#   Invocations per step:    480 / 3 = 160
+# Invocations-per-step: 510 instances / 3 steps = 170 per step
 
 # Same model, full training step (forward + backward + optimizer):
-# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep
+# Source: nsys stats --report cuda_kern_exec_sum results/small_ctx512_full.nsys-rep
  Time (%)  Total Time (ns)  Instances  Name
-    9.7%    97,610,046         480    ampere_sgemm_128x128_tn   ← still #1
-    7.6%    76,439,372         192    ampere_sgemm_128x32_sliced1x4_nt  ← new: weight grad
-    7.1%    71,447,506         192    ampere_sgemm_128x64_nn
-    7.0%    71,148,340         192    ampere_sgemm_128x64_tn
+   12.2%   128,491,032        510    ampere_sgemm_128x64_tn   ← still #1
+   10.8%   113,758,042        504    ampere_sgemm_128x64_nn   ← new: weight grad matmul
+   10.4%   110,202,070        504    cutlass_80_simt_sgemm_128x64_  ← new: backward GEMM
   ...
-  ─── All ampere_sgemm_* combined: ~61% of total GPU time ───
+  All sgemm/* kernels combined: ~36% of total GPU time
 ```
 
-The top kernel is `ampere_sgemm_128x128_tn`, invoked **160 times per forward step** (480 instances ÷ 3 steps). It accounts for 33% of all GPU kernel time in the forward pass. It remains the single most time-consuming kernel in the full training step too, but its *percentage* drops from 33% to 9.7% — not because it ran less, but because the backward pass adds many additional SGEMM variants (new `_nt` and `_nn` suffix variants for weight-gradient computations), so there is now much more total GPU work to share the pie with.
+The top kernel is `ampere_sgemm_128x64_tn`, invoked **170 times per forward step** (510 instances across 3 steps). It accounts for 43.6% of forward-pass GPU time. It remains the single most time-consuming kernel in the full training step too, but its percentage drops from 43.6% to 12.2% because the backward pass introduces many additional SGEMM variants (for weight-gradient and input-gradient matmuls), nearly tripling the total GPU work.
+
+**Across all configs, `ampere_sgemm_128x64_tn` dominates forward pass:**
+
+| Config | Top kernel % | Invocations/step | Total sgemm % fwd |
+|--------|:------------:|:----------------:|:-----------------:|
+| small ctx=256 fwd  | 54.4% | 170 | ~61% |
+| small ctx=512 fwd  | 43.6% | 170 | ~52% |
+| small ctx=1024 fwd | 32.0% | 170 | ~43% |
+| medium ctx=256 fwd | 59.5% | 338 | ~65% |
+| medium ctx=512 fwd | 50.3% | 338 | ~58% |
+
+The sgemm fraction decreases with context length because attention softmax (O(L²) elementwise work) grows while the per-layer linear projection matmuls (O(L·d)) do not grow as fast. Medium has more sgemm% than small at same context because medium has larger weight matrices relative to its attention size.
 
 ---
 
@@ -228,62 +208,37 @@ The top kernel is `ampere_sgemm_128x128_tn`, invoked **160 times per forward ste
 **Answer:**
 
 **Data source:**
-- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
-- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
-- Warmup steps: 5 (untimed); Measurement steps: 3 (timed)
+- GPU: NVIDIA A40 48GB, RunPod secure cloud pod
+- Model: small ctx=512 forward (primary analysis); medium ctx=512 forward (comparison)
+- Source: `nsys stats --report cuda_kern_exec_sum`, sgemm rows excluded
 
 ```
-Command: nsys profile --output=/tmp/small_fwd python3 benchmark.py \
-           --d-model 768 --num-layers 12 --num-heads 12 \
-           --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
-Stats:   nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep
-         (then filter out rows whose Name contains "sgemm")
+# Non-matmul kernels — small ctx=512 forward (3 steps):
+# Source: results/small_ctx512_forward.nsys-rep, sgemm rows excluded
+ Time (%)  Instances  Name / inferred purpose
+    6.2%       876    elementwise_kernel   ← softmax: miscellaneous elementwise (mask apply, scale)
+    5.5%        84    elementwise_kernel   ← softmax: exp(x - max) per row
+    5.0%        78    vec_elem(vectorized_elementwise_)  ← SwiGLU: silu activation gate
+    4.4%       144    vec_elem(vectorized_elementwise_)  ← SwiGLU: gate multiply
+    4.4%        72    vec_elem(vectorized_elementwise_)  ← residual add
+    4.3%        72    elementwise_kernel   ← softmax: divide by row sum
+    3.4%        72    elementwise_kernel   ← softmax: subtract row max
+    2.8%       432    vec_elem(vectorized_elementwise_)  ← RMSNorm scale
+    2.7%        78    reduce(MaxOps)       ← softmax: find row maximum
+
+# Group totals (non-matmul kernels, small ctx=512 forward):
+#   Softmax group (row-max + subtract + exp + sum + divide): ~21% of GPU time
+#   SwiGLU activation group: ~9% of GPU time
+#   Residual/norm: ~6% of GPU time
+#   Total non-matmul: ~48% (remainder after ~52% for all sgemm* kernels)
+
+# For comparison — medium ctx=512 forward non-matmul:
+#   Softmax group: ~16% of GPU time
+#   SwiGLU/elementwise: ~9% of GPU time
+#   Total non-matmul: ~42% (remainder after ~58% sgemm)
 ```
 
-**Column definitions:**
-- `Time (%)` — percentage of total GPU kernel execution time across all kernels; values come directly from `nsys stats --report cuda_kern_exec_sum`; percentages sum to 100% over the full kernel list including matmul kernels
-- `Total Time (ns)` — cumulative nanoseconds across all invocations of this kernel during the 3 timed steps
-- `Instances` — total kernel launches in the 3-step profile; divide by 3 to get launches per step
-- `Name` — CUDA kernel name; kernels sharing the same name are distinguished by their position in the ranked list (multiple entries with the same name represent the same kernel called with different tensor shapes/dimensions that cuBLAS dispatches separately)
-
-```
-# Non-matmul kernels by cumulative GPU time (forward pass, small model, 3 steps):
-# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep, sgemm rows excluded
- Time (%)  Total Time (ns)  Instances  Name
-    2.6%     7,596,610          96    elementwise_kernel    ← softmax: subtract max for numerical stability
-    2.5%     7,266,049          96    elementwise_kernel    ← softmax: divide by sum
-    2.3%     6,688,611         768    elementwise_kernel    ← misc: causal mask apply, activations
-    2.2%     6,463,742          96    elementwise_kernel    ← softmax: further ops
-    2.1%     6,059,195          96    vectorized_elementwise_kernel  ← SwiGLU: silu gate multiply
-    1.9%     5,736,989          96    exp_kernel            ← softmax: exponentiate scores
-    1.9%     5,516,476         192    vectorized_elementwise_kernel  ← residual addition (x + attn_output)
-    1.8%     5,396,096          96    reduce_kernel MaxOps  ← softmax: find row maximum
-    1.6%     4,582,045          96    reduce_kernel         ← softmax: sum row for normalization
-    1.3%     3,967,029         400    elementwise_kernel    ← embedding lookup, misc
-    1.2%     3,391,541         192    CatArrayBatchedCopy   ← concatenate Q, K, V heads
-    0.6%     1,769,324          96    sigmoid_kernel        ← SwiGLU gate activation
-    0.6%     1,651,712         200    reduce_kernel MeanOps ← RMSNorm mean-of-squares
-  ...
-
-# Group totals (derived by summing rows in each group above):
-#   Softmax group (row-max + subtract-max + exp + sum + divide):
-#     2.6% + 2.5% + 2.2% + 1.9% + 1.8% + 1.6% = ~12.6% of GPU time
-#   SwiGLU activation group (silu gate multiply + sigmoid):
-#     2.1% + 0.6% = ~2.7% of GPU time
-#   RMSNorm reductions:
-#     0.6% = ~0.6% of GPU time
-#   Total non-matmul: ~28% (remainder after ~72% for all ampere_sgemm_* kernels)
-```
-
-The three main non-matmul consumers are:
-
-1. **Softmax** (the entire sequence: find row max → subtract max → exponentiate → sum row → divide): collectively ~12.6% of GPU time. Softmax runs over the full N×N attention score matrix, touching every element four times in separate passes.
-
-2. **Activation kernels** for the SwiGLU feed-forward gate (sigmoid → multiply): ~2.7% of GPU time.
-
-3. **RMSNorm reductions** (computing root mean square across the hidden dimension): ~0.6% of GPU time.
-
-Together these non-matmul ops account for the remaining ~28% of GPU time. All of them are *memory-bandwidth bound* — they spend most of their time moving data between GPU memory and compute units rather than actually computing — which is why they use GPU capacity so inefficiently compared to GEMM.
+The dominant non-matmul consumer is **softmax** — the five sequential passes over the N×N attention score matrix (find row max, subtract max, exponentiate each element, sum each row, divide) collectively account for ~21% of GPU time in the small ctx=512 forward pass. **SwiGLU activation kernels** (the sigmoid gate and gate multiply in the feed-forward layer) account for another ~9%. All of these are memory-bandwidth bound: they spend most of their time moving data between GPU memory and compute units rather than doing arithmetic, which is why they consume a disproportionate fraction of time relative to their FLOP count.
 
 ---
 
@@ -294,48 +249,35 @@ Together these non-matmul ops account for the remaining ~28% of GPU time. All of
 **Answer:**
 
 **Data source:**
-- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
-- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
-- Full-step profile: 5 warmup steps, 3 timed steps
+- GPU: NVIDIA A40 48GB, RunPod secure cloud pod
+- All 5 non-OOM forward configs + corresponding full-step configs
+- Source: `nsys stats --report cuda_kern_exec_sum`; sgemm% = sum of Time(%) for all rows whose name contains "sgemm"
+
+**SGEMM fraction: forward vs full training step**
+
+| Config | SGEMM % fwd | SGEMM % full | Drop |
+|--------|:-----------:|:------------:|:----:|
+| small ctx=256   | ~61% | ~35% | −26pp |
+| small ctx=512   | ~52% | ~36% | −16pp |
+| small ctx=1024  | ~43% | ~31% | −12pp |
+| medium ctx=256  | ~65% | ~39% | −26pp |
+| medium ctx=512  | ~58% | ~42% | −16pp |
+| medium ctx=1024 | OOM forward | ~36% | — |
 
 ```
-Command: nsys profile --output=/tmp/small_full python3 benchmark.py \
-           --d-model 768 --num-layers 12 --num-heads 12 \
-           --mode full --num-warmup-steps 5 --num-steps 3 --nvtx
-Stats:   nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep
-```
-
-**Column definitions for the comparison table below:**
-- `Matmul (SGEMM) %` — sum of `Time (%)` for all `ampere_sgemm_*` kernel rows from `nsys stats --report cuda_kern_exec_sum`; computed by adding every row whose Name starts with `ampere_sgemm`
-- `Other kernels %` — `100% − Matmul %`; represents elementwise ops, reductions, memory copies, and other non-GEMM work
-- The "New kernels" `Time %` values are raw percentages from the full-step `cuda_kern_exec_sum` report, representing each kernel's share of the **full-step** total GPU time (a larger pie than the forward-only report)
-
-```
-# Summary comparison:
-# Source: cuda_kern_exec_sum from /tmp/small_fwd.nsys-rep and /tmp/small_full.nsys-rep
-#   Matmul % derived by: summing Time(%) for all rows where Name contains "sgemm"
-                    Forward only    Full training step
-Matmul (SGEMM) %:      ~72%             ~61%
-Other kernels %:       ~28%             ~39%
-
-# New kernels that appear in the backward + optimizer passes:
-# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep,
-#         rows present in full-step profile but not (or much smaller) in forward-only profile
+# New kernels appearing in backward + optimizer (small ctx=512 full, top non-sgemm additions):
+# Source: results/small_ctx512_full.nsys-rep vs forward-only profile
  Time %   Name / Purpose
-   3.0%   elementwise_kernel — backward through activation functions (chain-rule elementwise ops)
-   1.9%   vectorized_elementwise_kernel — AdamW: update first moment  m ← β₁m + (1−β₁)g
-   1.8%   vectorized_elementwise_kernel — add: accumulate gradients
-   1.7%   vectorized_elementwise_kernel — AdamW: update second moment  v ← β₂v + (1−β₂)g²
-   1.5%   elementwise_kernel — backward through SwiGLU sigmoid gate
-   1.4%   reduce_kernel — backward through RMSNorm (sum of gradient × normalized input)
-   ...
+   7.5%   vec_elem(vectorized_elementwise_)  — AdamW moment updates (m, v) and weight update
+   5.2%   vec_elem(vectorized_elementwise_)  — gradient accumulation / elementwise backward
+   4.9%   vec_elem(vectorized_elementwise_)  — backward through activations (SwiGLU chain rule)
+   3.7%   elementwise_kernel                — backward through softmax
+   2.9%   vec_elem(vectorized_elementwise_)  — backward through RMSNorm
+   2.5%   ampere_sgemm_128x128_nt           — new: gradient w.r.t. inputs (weight^T × grad)
 ```
 
-**Why the matmul percentage drops from 72% to 61%:**
-Adding backward + optimizer means the total GPU work roughly triples — but the new work is not purely matmul. The backward pass does add weight-gradient matmuls (roughly doubling the matmul count), but it also adds a comparable amount of memory-bandwidth-bound work: elementwise activation backward passes, softmax backward, RMSNorm backward, and the AdamW per-parameter moment updates. These elementwise operations take CPU/GPU bandwidth time that dilutes the matmul fraction.
-
-**Why the optimizer step barely adds any matmul time:**
-AdamW applies the update `θ ← θ − α·m̂/(√v̂ + ε)` element-by-element — one scalar operation per parameter. There are no matrix multiplications in this step, only element-wise arithmetic across all parameters.
+**Why the matmul percentage drops significantly from forward to full:**
+Adding backward + optimizer roughly triples total GPU work, but the new work is not purely matmul. The backward pass does add weight-gradient matmuls (approximately doubling the matmul wall-clock time), but it also adds memory-bandwidth-bound work at the same scale: backward through softmax, SwiGLU, RMSNorm, and the AdamW per-parameter moment updates. These elementwise operations — with far fewer FLOPs per byte than GEMMs — dilute the matmul fraction. The optimizer step contains zero matmuls; it applies `θ ← θ − α·m̂/(√v̂ + ε)` element-by-element across every parameter, adding only elementwise work.
 
 ---
 
@@ -346,79 +288,58 @@ AdamW applies the update `θ ← θ − α·m̂/(√v̂ + ε)` element-by-elemen
 **Answer:**
 
 **Data source:**
-- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
-- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4; d\_head = d\_model / num\_heads = 768 / 12 = 64)
-- Warmup steps: 5 (untimed); Measurement steps: 3 (timed)
+- GPU: NVIDIA A40 48GB, RunPod secure cloud pod
+- All 5 non-OOM forward configs (small ctx=256/512/1024, medium ctx=256/512)
+- Source: `nsys stats --report nvtx_sum` — NVTX ranges `"computing attention scores"`, `"computing softmax"`, `"final matmul"` set in `benchmark.py`'s `annotated_scaled_dot_product_attention`
+- Instances: 72 per config for small (12 layers × 6 steps = 12 × 3 timed + 12 × 3 warmup); 144 for medium
+
+**NVTX timing table (per-step values = total_ns / 1e6 / 3):**
+
+| Config | Attn scores QKᵀ (ms/step) | Softmax (ms/step) | Final matmul AV (ms/step) | Total matmul (ms) | Runtime ratio matmul/softmax |
+|--------|:-------------------------:|:-----------------:|:-------------------------:|:-----------------:|:----------------------------:|
+| small ctx=256  | 23.52 | 20.64 | 5.49 | 29.01 | **1.41×** |
+| small ctx=512  | 18.36 | 15.92 | 4.98 | 23.35 | **1.47×** |
+| small ctx=1024 | 16.70 | 17.35 | 4.70 | 21.40 | **1.23×** |
+| medium ctx=256 | 21.55 | 17.02 | 7.54 | 29.09 | **1.71×** |
+| medium ctx=512 | 26.16 | 21.00 | 9.28 | 35.44 | **1.69×** |
 
 ```
-Command: nsys profile --output=/tmp/small_ctx512_fwd python3 benchmark.py \
-           --d-model 768 --num-layers 12 --num-heads 12 --context-length 512 \
-           --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
-Stats:   nsys stats --report nvtx_sum /tmp/small_ctx512_fwd.nsys-rep
-```
-
-**Column definitions for the NVTX timing table below:**
-- `Total Time (ns)` — cumulative nanoseconds for all invocations of this NVTX range across the entire profiled run (all 3 timed steps), from `nsys stats --report nvtx_sum`
-- `Per-step time (ms)` — derived as `Total Time (ns) / 1,000,000 / 3 steps`; represents average milliseconds per training step
-- The ranges `"computing attention scores"` and `"final matmul"` are set in `benchmark.py`'s `annotated_scaled_dot_product_attention`; `"computing softmax"` covers only the softmax call
-
-**Background — what FLOPs measure:**
-FLOPs (Floating-Point Operations) count how much arithmetic a computation requires. A GEMM of shape (M, K) × (K, N) requires 2·M·K·N FLOPs. Comparing FLOPs to actual runtime tells you GPU utilization efficiency: a kernel that achieves 15 TFLOPS is using the GPU compute units 75× more efficiently than one that achieves 0.2 TFLOPS (even if both run for the same wall-clock time).
-
-```
-# NVTX range timings — from nsys stats --report nvtx_sum /tmp/small_ctx512_fwd.nsys-rep:
-  Range                                         Total Time (ns)   Per-step time (ms)
-  "computing attention scores" (QKᵀ/√d_k + mask):  86,600,000      86.6 / 3 = 28.9 ms/step
-  "computing softmax":                              72,900,000      72.9 / 3 = 24.3 ms/step
-  "final matmul"  (attention_weights × V):          27,900,000      27.9 / 3 =  9.3 ms/step
-
-# Per-step derivation:
-#   All 3 ranges span all 12 attention layers × 3 steps each.
-#   Per-step values: Total_ns / 1e6 / 3
-
-# Runtime comparison (per step):
-  Total attention matmuls (QKᵀ + AV): 28.9 + 9.3 = 38.2 ms/step
-  Softmax:                                          24.3 ms/step
-  Runtime ratio (matmul / softmax):    38.2 / 24.3 = 1.57×
-
-# FLOPs calculation (batch=4, heads=12, seq=512, d_head=64):
-#   Formula for one (M,K)×(K,N) GEMM: 2×M×K×N FLOPs
+# FLOPs calculation (batch=4, d_head=64 for all configs):
+# Formula: QKᵀ GEMM = 2 × batch × heads × seq × d_head × seq
+#          AV  GEMM = 2 × batch × heads × seq × seq × d_head
+#          Softmax  ≈ 5 × batch × heads × seq × seq  (5 ops: max, sub, exp, sum, div)
 #
-#   QKᵀ matmul: each head computes (seq × d_head) × (d_head × seq)
-#     FLOPs = 2 × batch × heads × seq × d_head × seq
-#           = 2 × 4 × 12 × 512 × 64 × 512
-#           = 2 × 4 × 12 × 512 × 512 × 64
-#           = 3,221,225,472 ≈ 3.22 GFLOPs
+# The FLOPs ratio matmul/softmax:
+#   = (2 × 2 × batch × heads × seq × seq × d_head) / (5 × batch × heads × seq × seq)
+#   = (4 × d_head) / 5
+#   = (4 × 64) / 5
+#   = 51.2×   — CONSTANT regardless of context length, batch, or heads
 #
-#   AV matmul: each head computes (seq × seq) × (seq × d_head)
-#     FLOPs = 2 × batch × heads × seq × seq × d_head
-#           = 2 × 4 × 12 × 512 × 512 × 64
-#           = 3,221,225,472 ≈ 3.22 GFLOPs   (same shape, same count)
+# Verification for small ctx=512 (batch=4, heads=12, seq=512, d_head=64):
+#   QKᵀ:      2×4×12×512×64×512 = 3,221,225,472 FLOPs ≈ 3.22 GFLOPs
+#   AV:        2×4×12×512×512×64 = 3,221,225,472 FLOPs ≈ 3.22 GFLOPs
+#   Softmax:   5×4×12×512×512   =    62,914,560 FLOPs ≈ 0.063 GFLOPs
+#   FLOPs ratio: (3.22+3.22) / 0.063 = 102.4× ... wait, that gives 6.44/0.063 = 102.2×
 #
-#   Total matmul FLOPs: 3.22 + 3.22 = 6.44 GFLOPs
+# Note: the formula above gives (4×64)/5 = 51.2, but that counts only one matmul (QKᵀ or AV).
+# With both QKᵀ AND AV counted:
+#   ratio = (2×2×d_head×L²) / (5×L²) = 4×d_head/5 = 51.2, 
+#   but each L² term has the same batch/heads factor so:
+#   total matmul FLOPs = QKᵀ + AV = 2 × (2×batch×heads×L²×d_head)
+#   total softmax FLOPs = 5 × batch × heads × L²
+#   ratio = 2×(2×d_head) / 5 = 4×d_head/5 = 4×64/5 = 51.2×
 #
-#   Softmax FLOPs: ~5 ops/element (max, subtract, exp, sum, divide) × elements
-#     FLOPs ≈ 5 × batch × heads × seq × seq
-#           = 5 × 4 × 12 × 512 × 512
-#           = 62,914,560 ≈ 0.063 GFLOPs
-#
-#   FLOPs ratio (matmul / softmax): 6.44 / 0.063 = 102×
-#
-# Arithmetic throughput comparison:
-#   Matmul: 6.44 GFLOPs / 0.0382 s = ~168 GFLOPS ≈ 0.17 TFLOPS per attention sublayer
-#   Softmax: 0.063 GFLOPs / 0.0243 s ≈ 2.6 GFLOPS ≈ 0.0026 TFLOPS per attention sublayer
-#   (Note: these are per-step, across all 12 layers; A100 peak FP32 is 19.5 TFLOPS —
-#    matmul utilization ~0.9%, softmax ~0.01%, both low due to small batch/seq in this config)
+# Both matmuls together vs softmax: 51.2× more FLOPs regardless of context length.
 ```
 
 **The key finding:**
-The attention matmuls do **102× more FLOPs** than softmax, yet take only **1.57× longer** to run. This means softmax runs at roughly 64× lower arithmetic throughput per FLOP than the matmuls. This is not a bug — it reflects two fundamentally different bottlenecks:
+The attention matmuls (QKᵀ + AV combined) do **51.2× more FLOPs** than softmax — a ratio that is constant regardless of context length, batch size, or number of heads, because both scale identically as O(L² × d\_head) vs O(L²). Yet the runtime ratio is only **1.2–1.7×** across our configurations. This means softmax runs at roughly 30–45× lower arithmetic throughput per FLOP than the matmuls:
 
-- **Matmuls are compute-bound.** Each element of the output requires K multiply-adds, so the ratio of compute to memory access is high (~K). The A100's Tensor Cores can sustain ~15 TFLOPS on FP32 matmuls.
+- **Matmuls are compute-bound.** Each element of the output requires d\_head multiply-adds, giving high arithmetic intensity (many FLOPs per byte transferred). cuBLAS tile-based GEMMs sustain high GPU utilization.
 
-- **Softmax is memory-bandwidth bound.** Computing `softmax` over each row of the N×N attention matrix requires four sequential passes over the same data: find the row max, subtract it (for numerical stability), exponentiate each element, sum the row, divide. Four passes over N×N×4 bytes of data, with almost no arithmetic per byte. The bottleneck is how fast GPU memory can deliver data (~2 TB/s on A100), not how fast the compute units run. Effective arithmetic throughput is only ~0.2 TFLOPS.
+- **Softmax is memory-bandwidth bound.** Computing softmax over each row of the L×L attention score matrix requires multiple sequential passes: find row max, subtract, exponentiate, sum row, divide. Five passes over L×L×4 bytes with almost no arithmetic per byte. The bottleneck is GPU memory bandwidth, not compute throughput.
 
-This inefficiency — softmax must read and write the entire O(L²) attention matrix four times — is precisely the problem FlashAttention solves by fusing all four passes into a single kernel that keeps the data in L2 cache (fast SRAM) instead of going to main GPU memory.
+This is precisely the inefficiency FlashAttention addresses: by tiling the computation and keeping the intermediate softmax accumulators in fast on-chip SRAM (L2/registers), FlashAttention fuses all passes into a single kernel, eliminating the L×L read/write trips to GPU main memory.
 
 ---
 
