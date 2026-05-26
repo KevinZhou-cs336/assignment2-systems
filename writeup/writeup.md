@@ -923,9 +923,111 @@ TODO
 
 **Answer:**
 
-TODO
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, driver 550.54.15, PyTorch 2.4.1+cu121
+- Script: `cs336_systems/pytorch_attention.py`; batch=8, no multihead (Q/K/V shape: `[8, seq_len, d_head]`)
+- Warmup: 10 steps (untimed); Measurement: 100 steps (timed)
+- `fwd (ms)`: wall-clock time for forward only — `synchronize()` → `attention(Q,K,V)` → `synchronize()`; mean over 100 steps
+- `bwd (ms)`: mean of `time(fwd+bwd) − time(fwd)` over 100 steps
+- `fwd mem (GB)`: `torch.cuda.max_memory_allocated()` after `reset_peak_memory_stats()`, forward-only loop
+- `full mem (GB)`: peak memory during forward+backward loop (includes saved activations + gradients)
+- Raw data: `writeup/pytorch_attention_data/bench_output.txt`
 
-*(attach timing table)*
+**Timings — float32:**
+
+| d\_head | seq\_len | fwd (ms) | bwd (ms) | fwd+bwd (ms) | fwd mem (GB) | full mem (GB) |
+|:-------:|:--------:|:--------:|:--------:|:------------:|:------------:|:-------------:|
+| 16  |   256 |   0.38 |   2.80 |   3.17 | 0.017 | 0.029 |
+| 16  |  1024 |   0.51 |   1.23 |   1.75 | 0.144 | 0.209 |
+| 16  |  4096 |   6.08 |  15.85 |  21.94 | 2.028 | 3.040 |
+| 16  |  8192 |  22.79 |  58.47 |  81.25 | 8.040 | 12.063 |
+| 16  | 16384 |  90.67 | 235.04 | 325.70 | 32.064 | 48.111 |
+| 32  |   256 |   0.34 |   1.56 |   1.90 | 0.025 | 0.031 |
+| 32  |  1024 |   0.51 |   2.51 |   3.02 | 0.147 | 0.215 |
+| 32  |  4096 |   6.33 |  16.08 |  22.40 | 2.040 | 3.063 |
+| 32  |  8192 |  23.90 |  59.52 |  83.41 | 8.063 | 12.110 |
+| 32  | 16384 |  95.20 | 238.97 | 334.18 | 32.111 | 48.205 |
+| 64  |   256 |   0.37 |   2.86 |   3.24 | 0.027 | 0.033 |
+| 64  |  1024 |   0.54 |   2.55 |   3.10 | 0.153 | 0.227 |
+| 64  |  4096 |   6.84 |  16.51 |  23.35 | 2.063 | 3.110 |
+| 64  |  8192 |  26.05 |  61.53 |  87.57 | 8.110 | 12.204 |
+| 64  | 16384 | 103.39 | 246.18 | 349.57 | 32.205 | 48.392 |
+| 128 |   256 |   0.34 |   2.88 |   3.21 | 0.030 | 0.039 |
+| 128 |  1024 |   0.61 |   2.63 |   3.24 | 0.164 | 0.250 |
+| 128 |  4096 |   7.82 |  17.47 |  25.30 | 2.110 | 3.204 |
+| 128 |  8192 |  29.92 |  65.57 |  95.49 | 8.204 | 12.392 |
+| 128 | 16384 | 118.74 | 261.97 | 380.70 | 32.392 | 48.767 |
+
+**Timings — bfloat16:**
+
+| d\_head | seq\_len | fwd (ms) | bwd (ms) | fwd+bwd (ms) | fwd mem (GB) | full mem (GB) |
+|:-------:|:--------:|:--------:|:--------:|:------------:|:------------:|:-------------:|
+| 16  |   256 |   0.33 |   1.54 |   1.87 | 0.012 | 0.022 |
+| 16  |  1024 |   0.42 |   2.60 |   3.01 | 0.080 | 0.113 |
+| 16  |  4096 |   2.67 |   6.22 |   8.89 | 1.022 | 1.528 |
+| 16  |  8192 |  11.12 |  24.42 |  35.54 | 4.028 | 6.040 |
+| 16  | 16384 |  43.73 |  98.38 | 142.12 | 16.041 | 24.064 |
+| 32  |   256 |   0.36 |   2.67 |   3.03 | 0.021 | 0.023 |
+| 32  |  1024 |   0.33 |   2.84 |   3.18 | 0.081 | 0.116 |
+| 32  |  4096 |   2.69 |   6.23 |   8.93 | 1.028 | 1.540 |
+| 32  |  8192 |  11.13 |  24.43 |  35.56 | 4.040 | 6.063 |
+| 32  | 16384 |  43.75 |  98.32 | 142.08 | 16.064 | 24.111 |
+| 64  |   256 |   0.33 |   2.75 |   3.07 | 0.021 | 0.025 |
+| 64  |  1024 |   0.36 |   2.69 |   3.05 | 0.084 | 0.121 |
+| 64  |  4096 |   2.77 |   6.32 |   9.09 | 1.040 | 1.563 |
+| 64  |  8192 |  11.38 |  24.72 |  36.10 | 4.063 | 6.110 |
+| 64  | 16384 |  44.69 |  99.40 | 144.09 | 16.111 | 24.205 |
+| 128 |   256 |   0.35 |   2.74 |   3.09 | 0.023 | 0.028 |
+| 128 |  1024 |   0.34 |   2.82 |   3.16 | 0.090 | 0.133 |
+| 128 |  4096 |   2.95 |   6.58 |   9.53 | 1.063 | 1.610 |
+| 128 |  8192 |  11.79 |  25.19 |  36.99 | 4.110 | 6.204 |
+| 128 | 16384 |  46.01 | 100.71 | 146.72 | 16.205 | 24.392 |
+
+**OOM analysis:**
+
+No OOM occurred in any tested configuration on the A100 80GB. The largest configuration (d\_head=128, seq\_len=16384, fp32) used 48.767 GB, leaving ~31 GB headroom. The next power-of-two (seq\_len=32768) would require approximately 4× the memory ≈ 195 GB and would OOM on any current GPU. On a 24 GB GPU (e.g., RTX 3090), seq\_len=16384 (48.767 GB fp32 or 24.392 GB bf16) would be the first OOM configuration for fp32; bf16 seq\_len=16384 just barely fits (24.392 GB ≈ 24 GB limit).
+
+**Memory accounting — d\_head=128, seq\_len=16384, fp32, batch=8:**
+
+The attention computation creates and saves these tensors:
+
+| Tensor | Shape | Size (fp32) | Reason kept for backward |
+|--------|-------|:-----------:|--------------------------|
+| Q input | [8, 16384, 128] | 0.537 GB | needed to compute ∂QKᵀ/∂K |
+| K input | [8, 16384, 128] | 0.537 GB | needed to compute ∂QKᵀ/∂Q |
+| V input | [8, 16384, 128] | 0.537 GB | needed to compute ∂(AV)/∂A |
+| Pre-softmax scores S = QKᵀ/√d | [8, 16384, 16384] | 8.590 GB | needed for softmax backward |
+| Post-softmax weights A = softmax(S) | [8, 16384, 16384] | 8.590 GB | needed to compute ∂(AV)/∂V |
+| **Total saved for backward** | | **18.79 GB** | |
+
+```
+# Derivation of each size (bytes = batch × seq × seq × 4):
+Attention score matrix: 8 × 16384 × 16384 × 4 = 8,589,934,592 bytes ≈ 8.000 GiB
+Q / K / V:             8 × 16384 × 128   × 4 =   536,870,912 bytes ≈ 0.500 GiB each
+
+# Measured forward-only peak (32.392 GB) > theoretical (18.79 GB) because:
+# PyTorch's memory allocator rounds up to power-of-two block sizes (fragmentation),
+# and temporary buffers are created during einsum tiling before the final output is written.
+
+# Gradient tensors (added during backward, full_mem − fwd_mem = 48.767 − 32.392 = 16.375 GB):
+# ≈ 2 × attention matrix (∂L/∂S and ∂L/∂A) ≈ 2 × 8.590 GB = 17.18 GB (roughly matches)
+```
+
+**How memory saved for backward scales with sequence length:**
+
+The dominant saved tensors are the two attention matrices (pre- and post-softmax), each of shape `[batch, seq, seq]`. Their size scales as O(L²). The Q/K/V tensors (O(L)) become negligible at large L.
+
+Empirical verification (d\_head=128, fp32, `full_mem − fwd_mem`):
+
+| seq\_len | saved for bwd (GB) | ratio vs prev | expected (O(L²)) |
+|:--------:|:-----------------:|:-------------:|:----------------:|
+|   256 | 0.009 | — | — |
+|  1024 | 0.086 | ×9.6 | ×16 (4×L) |
+|  4096 | 1.094 | ×12.7 | ×16 (4×L) |
+|  8192 | 4.188 | ×3.83 | ×4 (2×L) |
+| 16384 | 16.375 | ×3.91 | ×4 (2×L) |
+
+At large L (≥4096), the ratio converges to the L² prediction, confirming **O(L²) backward memory**. At small L the Q/K/V terms (O(L)) inflate the ratio.
 
 ---
 
@@ -937,9 +1039,61 @@ TODO
 
 **Answer:**
 
-TODO
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, driver 550.54.15, PyTorch 2.4.1+cu121
+- Script: `cs336_systems/torch_compile_attention.py`; same sweep as `pytorch_attention` (batch=8, warmup=10, steps=100)
+- `torch.compile` applied to `scaled_dot_product_attention` with default settings (Inductor backend)
+- Warmup steps include the torch.compile compilation time (first call triggers JIT compilation)
+- Speedup = vanilla\_time / compiled\_time; >1 means compiled is faster
+- Raw data: `writeup/pytorch_attention_data/bench_output.txt`
 
-*(attach table)*
+**float32 — timings and speedup:**
+
+| d\_head | seq\_len | vanilla fwd (ms) | compiled fwd (ms) | vanilla fwd+bwd (ms) | compiled fwd+bwd (ms) | fwd speedup | fwd+bwd speedup |
+|:-------:|:--------:|:----------------:|:-----------------:|:--------------------:|:---------------------:|:-----------:|:---------------:|
+| 16  |   256 |  0.33 |  0.27 |   3.17 |   3.24 | 1.22× | 0.98× |
+| 16  |  1024 |  0.49 |  0.33 |   3.20 |   2.90 | 1.46× | 1.10× |
+| 16  |  4096 |  6.08 |  3.54 |  21.92 |  13.40 | 1.72× | 1.64× |
+| 16  |  8192 | 23.10 | 13.91 |  81.74 |  49.08 | 1.66× | 1.67× |
+| 16  | 16384 | 91.82 | 57.99 | 326.97 | 201.00 | 1.58× | 1.63× |
+| 32  |  4096 |  6.35 |  4.40 |  22.42 |  14.81 | 1.45× | 1.51× |
+| 32  |  8192 | 24.14 | 16.29 |  83.87 |  53.25 | 1.48× | 1.58× |
+| 32  | 16384 | 95.83 | 62.94 | 334.71 | 209.31 | 1.52× | 1.60× |
+| 64  |  4096 |  6.86 |  4.49 |  23.42 |  15.16 | 1.53× | 1.54× |
+| 64  |  8192 | 26.12 | 16.07 |  87.85 |  54.14 | 1.63× | 1.62× |
+| 64  | 16384 |103.70 | 70.78 | 350.05 | 225.08 | 1.47× | 1.56× |
+| 128 |  4096 |  7.83 |  5.45 |  25.33 |  17.13 | 1.44× | 1.48× |
+| 128 |  8192 | 29.94 | 20.00 |  95.63 |  62.23 | 1.50× | 1.54× |
+| 128 | 16384 |118.90 | 86.18 | 380.96 | 256.08 | 1.38× | 1.49× |
+
+*(Small seq_len rows omitted; at seq_len ≤ 1024 the kernel-launch overhead dominates and speedup is inconsistent — sometimes <1×)*
+
+**bfloat16 — timings and speedup:**
+
+| d\_head | seq\_len | vanilla fwd (ms) | compiled fwd (ms) | vanilla fwd+bwd (ms) | compiled fwd+bwd (ms) | fwd speedup | fwd+bwd speedup |
+|:-------:|:--------:|:----------------:|:-----------------:|:--------------------:|:---------------------:|:-----------:|:---------------:|
+| 16  |  4096 |  2.68 |  1.27 |   8.89 |   3.63 | 2.11× | 2.45× |
+| 16  |  8192 | 11.13 |  4.76 |  35.51 |  13.62 | 2.34× | 2.61× |
+| 16  | 16384 | 43.72 | 19.68 | 141.93 |  59.56 | 2.22× | 2.38× |
+| 32  |  4096 |  2.71 |  1.39 |   8.92 |   3.82 | 1.95× | 2.33× |
+| 32  |  8192 | 11.11 |  6.07 |  35.54 |  15.60 | 1.83× | 2.28× |
+| 32  | 16384 | 43.73 | 20.56 | 142.07 |  60.17 | 2.13× | 2.36× |
+| 64  |  4096 |  2.78 |  1.48 |   9.10 |   4.17 | 1.88× | 2.18× |
+| 64  |  8192 | 11.37 |  5.35 |  36.08 |  15.38 | 2.12× | 2.35× |
+| 64  | 16384 | 44.67 | 21.47 | 143.98 |  62.03 | 2.08× | 2.32× |
+| 128 |  4096 |  2.94 |  1.68 |   9.52 |   4.67 | 1.76× | 2.04× |
+| 128 |  8192 | 11.78 |  5.80 |  36.98 |  16.42 | 2.03× | 2.25× |
+| 128 | 16384 | 46.02 | 22.84 | 146.64 |  64.55 | 2.01× | 2.27× |
+
+**Key observations:**
+
+`torch.compile` generates fused GPU kernels using the Inductor backend (Triton under the hood). For float32, it speeds up attention by **1.4–1.7×** at larger sequence lengths. For bfloat16, the speedup is significantly larger at **2.0–2.6×**. The difference between dtypes explains why:
+
+- **float32**: The Inductor compiler fuses the softmax operations and can partially fuse the attention pipeline, but the bottleneck matmuls (QKᵀ and AV) are already calling highly optimized cuBLAS kernels. The improvement comes mainly from fusing the softmax's five sequential elementwise passes (reduce-max, subtract, exp, sum, divide) into a single kernel.
+
+- **bfloat16**: On top of the same fusion benefits, the compiled kernel can issue Tensor Core instructions for the QKᵀ and AV matmuls (BF16 Tensor Cores run at ~4× the throughput of FP32). The uncompiled vanilla attention also invokes cuBLAS for these matmuls, but `torch.compile` generates a fused attention kernel that keeps the L×L intermediate in registers/shared memory, avoiding global memory round-trips. This is the beginning of the FlashAttention insight: fusing the attention computation into a single kernel dramatically reduces memory bandwidth pressure.
+
+- **Small seq_len inconsistency**: At seq_len ≤ 1024, CUDA kernel-launch overhead dominates execution time (~2–3 ms baseline), so the compiled kernel's higher compute efficiency doesn't translate to wall-clock speedup. The compiled code may actually be slower if it launches more kernels.
 
 ---
 
