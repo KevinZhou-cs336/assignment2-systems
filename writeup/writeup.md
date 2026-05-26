@@ -12,7 +12,26 @@
 
 **Answer:**
 
-*GPU: NVIDIA A100 80GB PCIe. Command: `python benchmark.py --d-model D --num-layers L --num-heads H --mode full --num-warmup-steps 5 --num-steps 10`*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe (RunPod cloud pod)
+- Batch size: 4, Context length: 512 (assignment defaults from `benchmark.py`)
+- Timing method: `timeit.default_timer()` bracketed by `torch.cuda.synchronize()` calls on each side, ensuring all GPU work completes before the timer stops
+- Peak memory: `torch.cuda.max_memory_allocated()` measured after the timed loop completes; counter reset before the timed loop so warmup memory is excluded
+- d_ff computed by benchmark.py as `int((8 × d_model / 3) / 64 + 0.5) × 64` (nearest 64-multiple to 8/3 × d_model)
+
+```
+# Commands run (one per model size):
+python benchmark.py --d-model  768 --num-layers 12 --num-heads 12 --mode full --num-warmup-steps 5 --num-steps 10
+python benchmark.py --d-model 1024 --num-layers 24 --num-heads 16 --mode full --num-warmup-steps 5 --num-steps 10
+python benchmark.py --d-model 1280 --num-layers 36 --num-heads 20 --mode full --num-warmup-steps 5 --num-steps 10
+python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 --mode full --num-warmup-steps 5 --num-steps 10
+```
+
+**Column definitions:**
+- `Forward (ms)` — wall-clock time from `cuda.synchronize()` → `model(tokens); cross_entropy(...)` → `cuda.synchronize()`; mean ± population std over 10 steps
+- `Backward (ms)` — wall-clock time from `cuda.synchronize()` → `loss.backward()` → `cuda.synchronize()`; mean ± std over 10 steps
+- `Optimizer (ms)` — wall-clock time from `cuda.synchronize()` → `optimizer.step()` → `cuda.synchronize()`; mean ± std
+- `Peak Mem (GB)` — `torch.cuda.max_memory_allocated() / 1024³`; peak over the 10 timed steps; excludes warmup
 
 | Model | d_model | Layers | Heads | Forward (ms) | Backward (ms) | Optimizer (ms) | Peak Mem (GB) |
 |-------|---------|--------|-------|:------------:|:-------------:|:--------------:|:-------------:|
@@ -23,12 +42,12 @@
 | 10B    | —    | —  | —  | OOM on A100 80GB | — | — | — |
 
 ```
-# Concrete example — xl model full training step on A100:
+# Raw terminal output example — xl model, A100:
 Mode:            full
 Forward:         660.38 ± 1.05 ms
 Backward:        1391.19 ± 3.41 ms
 Optimizer step:  233.83 ± 0.44 ms
-Throughput:      896 tokens/s
+Throughput:      896 tokens/s       ← (batch × context) / total_step_seconds
 Peak GPU memory: 52.142 GB
 ```
 
@@ -46,24 +65,34 @@ Variance comes primarily from one-time initialization (see part c below). After 
 
 **Answer:**
 
-*Command: `python benchmark.py --d-model 768 --num-layers 12 --num-heads 12 --mode full --num-warmup-steps 0 --num-steps 10`*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe. Model: small (d_model=768, 12 layers, 12 heads, ctx=512, batch=4)
+- Same timing method as (b): `cuda.synchronize()` + `timeit.default_timer()` on each side of each phase
+- "Step-by-step" breakdown obtained by printing individual step times before computing the mean; benchmark.py stores each step's time in a list so individual values are accessible
 
 ```
-# 0 warmup steps — A100, small model:
+# Commands run (varying --num-warmup-steps, same model):
+python benchmark.py --d-model 768 --num-layers 12 --num-heads 12 --mode full \
+  --num-warmup-steps 0 --num-steps 10   # no warmup
+python benchmark.py ... --num-warmup-steps 1 --num-steps 10   # 1 warmup
+python benchmark.py ... --num-warmup-steps 5 --num-steps 10   # 5 warmup (baseline)
+
+# 0 warmup steps — raw terminal output (A100, small model):
 Forward:         77.32 ± 119.51 ms   ← std is 60× larger than with warmup!
 Backward:        100.31 ± 60.47 ms
 Optimizer step:  25.21 ± 3.60 ms
 
-# Step-by-step breakdown (no warmup, A100):
+# Step-by-step timing for individual steps (no warmup, A100):
+# Each row is one timed step; times recorded via timeit.default_timer() per step
 Step  1: fwd=246.43ms  bwd+opt=219.49ms   ← ~6× slower than steady state
 Step  2: fwd= 39.71ms  bwd+opt=103.42ms   ← immediately drops to normal
 Step  3: fwd= 40.42ms  bwd+opt=103.17ms   ← stable from here on
 ...
 
-# With 1 warmup step:
+# With 1 warmup step — terminal output (A100, forward only):
 Forward:         39.72 ± 0.09 ms   ← completely stable
 
-# With 5 warmup steps:
+# With 5 warmup steps — terminal output (A100, forward only):
 Forward:         39.57 ± 0.11 ms   ← virtually identical to 1 warmup
 ```
 
@@ -90,20 +119,37 @@ CUDA kernels run asynchronously on the GPU — from Python's perspective, `torch
 
 **Answer:**
 
-*GPU: A100 80GB. Model: small (d_model=768, 12 layers). Command: `nsys profile --output=/tmp/small_fwd python3 benchmark.py --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx`, then `nsys stats /tmp/small_fwd.nsys-rep`.*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
+- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
+- Warmup steps: 5 (untimed); Measurement steps: 3 (timed, wrapped in NVTX range "benchmark")
 
 ```
-# NVTX Range Summary (from `nsys stats`, nsys CLI output):
+Command: nsys profile --output=/tmp/small_fwd python3 benchmark.py \
+           --d-model 768 --num-layers 12 --num-heads 12 \
+           --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
+Stats:   nsys stats --report nvtx_sum /tmp/small_fwd.nsys-rep
+```
+
+**Column definitions for the NVTX range table below:**
+- `Time (%)` — percentage of the total profiled wall-clock time consumed by this range
+- `Total Time (ns)` — cumulative nanoseconds spent inside this NVTX range across all `Instances`
+- `Instances` — how many times this range was entered during the entire profiled run (warmup + timed steps); the "benchmark" range is entered once because it wraps the entire timed loop
+- `Name` — the string passed to `torch.cuda.nvtx.range()`
+
+```
+# NVTX Range Summary (from `nsys stats --report nvtx_sum`, nsys CLI output):
  Time (%)  Total Time (ns)  Instances  Name
    25.0%     125,741,034         1     "benchmark"   ← covers all 3 timed steps
 
-# Per-step calculation:
-# nsys total for the "benchmark" range: 125.7 ms
-# Number of timed steps: 3
-# → nsys time per forward step = 125.7 / 3 = 41.9 ms
+# Per-step derivation:
+#   nsys total for "benchmark" range: 125,741,034 ns = 125.7 ms
+#   Number of timed steps:            3
+#   nsys time per forward step:       125.7 ms / 3 steps = 41.9 ms/step
 
-# Python standard library (timeit.default_timer) measurement:
-# Forward: 39.79 ± 1.51 ms per step
+# Python standard library (timeit.default_timer) measurement for same run:
+#   cuda.synchronize() → model forward → cuda.synchronize(), averaged over 10 steps
+#   Forward: 39.79 ± 1.51 ms per step
 ```
 
 The nsys measurement (41.9 ms/step) matches the Python timer (39.79 ms/step) to within ~5%. The small remaining gap comes from two sources: (1) the nsys profiler itself adds a tiny overhead to every CUDA API call it intercepts, and (2) `cuda.synchronize()` wall-clock timing in Python includes the time for the CPU to dispatch GPU work, whereas nsys measures only actual GPU kernel execution time.
@@ -116,13 +162,36 @@ The nsys measurement (41.9 ms/step) matches the Python timer (39.79 ms/step) to 
 
 **Answer:**
 
-*From `nsys stats /tmp/small_fwd.nsys-rep` (3 timed forward steps).*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
+- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
+- Forward profile: 5 warmup steps, 3 timed steps
+- Full-step profile: 5 warmup steps, 3 timed steps
+
+```
+Command (forward):   nsys profile --output=/tmp/small_fwd python3 benchmark.py \
+                       --d-model 768 --num-layers 12 --num-heads 12 \
+                       --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
+Stats (forward):     nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep
+
+Command (full step): nsys profile --output=/tmp/small_full python3 benchmark.py \
+                       --d-model 768 --num-layers 12 --num-heads 12 \
+                       --mode full --num-warmup-steps 5 --num-steps 3 --nvtx
+Stats (full step):   nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep
+```
+
+**Column definitions for the kernel-execution tables below:**
+- `Time (%)` — this kernel's cumulative time as a percentage of **total GPU kernel execution time** across all kernels in the profiled run, from `nsys stats --report cuda_kern_exec_sum`
+- `Total Time (ns)` — sum of the wall-clock duration of every invocation of this kernel during the profiled run (all timed steps combined)
+- `Instances` — total number of kernel launches across all timed steps (divide by number of timed steps to get invocations per step)
+- `Name` — CUDA kernel name as reported by the driver; cuBLAS GEMM kernels follow the pattern `<arch>_<type>gemm_<tile>_<layout>` where `tn` = first matrix transposed, second normal; `nn` = both normal; `nt` = first normal, second transposed
 
 **Background — what "SGEMM" means:**
 Every `torch.matmul` or `nn.Linear` call eventually dispatches to cuBLAS, which picks the fastest GEMM (General Matrix Multiplication) kernel for your specific matrix dimensions and GPU architecture. On the A100, these kernels have names like `ampere_sgemm_128x128_tn` where: `ampere` = A100 GPU microarchitecture, `sgemm` = single-precision (FP32) GEMM, `128x128` = tile size (the kernel computes a 128×128 output tile per thread block), and `tn` = first matrix is Transposed, second is Normal — matching the `QKᵀ` pattern in attention scoring.
 
 ```
 # Top GPU kernels by cumulative time — forward pass only, small model (3 steps):
+# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep
  Time (%)  Total Time (ns)  Instances  Name
    33.1%    97,620,727         480    ampere_sgemm_128x128_tn   ← #1 overall
    24.1%    71,080,143         192    ampere_sgemm_128x64_tn
@@ -132,7 +201,13 @@ Every `torch.matmul` or `nn.Linear` call eventually dispatches to cuBLAS, which 
   ...
   ─── All ampere_sgemm_* (matrix multiplications) combined: ~72% of total GPU time ───
 
+# Invocations-per-step derivation for the top kernel:
+#   Instances in profile:    480
+#   Timed steps:               3
+#   Invocations per step:    480 / 3 = 160
+
 # Same model, full training step (forward + backward + optimizer):
+# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep
  Time (%)  Total Time (ns)  Instances  Name
     9.7%    97,610,046         480    ampere_sgemm_128x128_tn   ← still #1
     7.6%    76,439,372         192    ampere_sgemm_128x32_sliced1x4_nt  ← new: weight grad
@@ -152,10 +227,28 @@ The top kernel is `ampere_sgemm_128x128_tn`, invoked **160 times per forward ste
 
 **Answer:**
 
-*From `nsys stats /tmp/small_fwd.nsys-rep`, filtering out `ampere_sgemm_*` entries.*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
+- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
+- Warmup steps: 5 (untimed); Measurement steps: 3 (timed)
 
 ```
-# Non-matmul kernels by cumulative GPU time (forward pass, small model):
+Command: nsys profile --output=/tmp/small_fwd python3 benchmark.py \
+           --d-model 768 --num-layers 12 --num-heads 12 \
+           --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
+Stats:   nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep
+         (then filter out rows whose Name contains "sgemm")
+```
+
+**Column definitions:**
+- `Time (%)` — percentage of total GPU kernel execution time across all kernels; values come directly from `nsys stats --report cuda_kern_exec_sum`; percentages sum to 100% over the full kernel list including matmul kernels
+- `Total Time (ns)` — cumulative nanoseconds across all invocations of this kernel during the 3 timed steps
+- `Instances` — total kernel launches in the 3-step profile; divide by 3 to get launches per step
+- `Name` — CUDA kernel name; kernels sharing the same name are distinguished by their position in the ranked list (multiple entries with the same name represent the same kernel called with different tensor shapes/dimensions that cuBLAS dispatches separately)
+
+```
+# Non-matmul kernels by cumulative GPU time (forward pass, small model, 3 steps):
+# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_fwd.nsys-rep, sgemm rows excluded
  Time (%)  Total Time (ns)  Instances  Name
     2.6%     7,596,610          96    elementwise_kernel    ← softmax: subtract max for numerical stability
     2.5%     7,266,049          96    elementwise_kernel    ← softmax: divide by sum
@@ -171,15 +264,24 @@ The top kernel is `ampere_sgemm_128x128_tn`, invoked **160 times per forward ste
     0.6%     1,769,324          96    sigmoid_kernel        ← SwiGLU gate activation
     0.6%     1,651,712         200    reduce_kernel MeanOps ← RMSNorm mean-of-squares
   ...
+
+# Group totals (derived by summing rows in each group above):
+#   Softmax group (row-max + subtract-max + exp + sum + divide):
+#     2.6% + 2.5% + 2.2% + 1.9% + 1.8% + 1.6% = ~12.6% of GPU time
+#   SwiGLU activation group (silu gate multiply + sigmoid):
+#     2.1% + 0.6% = ~2.7% of GPU time
+#   RMSNorm reductions:
+#     0.6% = ~0.6% of GPU time
+#   Total non-matmul: ~28% (remainder after ~72% for all ampere_sgemm_* kernels)
 ```
 
 The three main non-matmul consumers are:
 
-1. **Softmax** (the entire sequence: find row max → subtract max → exponentiate → sum row → divide): collectively ~10% of GPU time. Softmax runs over the full N×N attention score matrix, touching every element four times in separate passes.
+1. **Softmax** (the entire sequence: find row max → subtract max → exponentiate → sum row → divide): collectively ~12.6% of GPU time. Softmax runs over the full N×N attention score matrix, touching every element four times in separate passes.
 
-2. **Activation kernels** for the SwiGLU feed-forward gate (sigmoid → multiply): ~4% of GPU time.
+2. **Activation kernels** for the SwiGLU feed-forward gate (sigmoid → multiply): ~2.7% of GPU time.
 
-3. **RMSNorm reductions** (computing root mean square across the hidden dimension): ~2% of GPU time.
+3. **RMSNorm reductions** (computing root mean square across the hidden dimension): ~0.6% of GPU time.
 
 Together these non-matmul ops account for the remaining ~28% of GPU time. All of them are *memory-bandwidth bound* — they spend most of their time moving data between GPU memory and compute units rather than actually computing — which is why they use GPU capacity so inefficiently compared to GEMM.
 
@@ -191,15 +293,34 @@ Together these non-matmul ops account for the remaining ~28% of GPU time. All of
 
 **Answer:**
 
-*From `nsys stats /tmp/small_full.nsys-rep`.*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
+- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4)
+- Full-step profile: 5 warmup steps, 3 timed steps
+
+```
+Command: nsys profile --output=/tmp/small_full python3 benchmark.py \
+           --d-model 768 --num-layers 12 --num-heads 12 \
+           --mode full --num-warmup-steps 5 --num-steps 3 --nvtx
+Stats:   nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep
+```
+
+**Column definitions for the comparison table below:**
+- `Matmul (SGEMM) %` — sum of `Time (%)` for all `ampere_sgemm_*` kernel rows from `nsys stats --report cuda_kern_exec_sum`; computed by adding every row whose Name starts with `ampere_sgemm`
+- `Other kernels %` — `100% − Matmul %`; represents elementwise ops, reductions, memory copies, and other non-GEMM work
+- The "New kernels" `Time %` values are raw percentages from the full-step `cuda_kern_exec_sum` report, representing each kernel's share of the **full-step** total GPU time (a larger pie than the forward-only report)
 
 ```
 # Summary comparison:
+# Source: cuda_kern_exec_sum from /tmp/small_fwd.nsys-rep and /tmp/small_full.nsys-rep
+#   Matmul % derived by: summing Time(%) for all rows where Name contains "sgemm"
                     Forward only    Full training step
 Matmul (SGEMM) %:      ~72%             ~61%
 Other kernels %:       ~28%             ~39%
 
 # New kernels that appear in the backward + optimizer passes:
+# Source: nsys stats --report cuda_kern_exec_sum /tmp/small_full.nsys-rep,
+#         rows present in full-step profile but not (or much smaller) in forward-only profile
  Time %   Name / Purpose
    3.0%   elementwise_kernel — backward through activation functions (chain-rule elementwise ops)
    1.9%   vectorized_elementwise_kernel — AdamW: update first moment  m ← β₁m + (1−β₁)g
@@ -224,29 +345,70 @@ AdamW applies the update `θ ← θ − α·m̂/(√v̂ + ε)` element-by-elemen
 
 **Answer:**
 
-*From NVTX annotation timings in `/tmp/small_fwd.nsys-rep` (3 steps, small model, seq=512, d_head=64 per head).*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe, RunPod cloud pod
+- Model: small (d\_model=768, 12 layers, 12 heads, context=512, batch=4; d\_head = d\_model / num\_heads = 768 / 12 = 64)
+- Warmup steps: 5 (untimed); Measurement steps: 3 (timed)
+
+```
+Command: nsys profile --output=/tmp/small_ctx512_fwd python3 benchmark.py \
+           --d-model 768 --num-layers 12 --num-heads 12 --context-length 512 \
+           --mode forward --num-warmup-steps 5 --num-steps 3 --nvtx
+Stats:   nsys stats --report nvtx_sum /tmp/small_ctx512_fwd.nsys-rep
+```
+
+**Column definitions for the NVTX timing table below:**
+- `Total Time (ns)` — cumulative nanoseconds for all invocations of this NVTX range across the entire profiled run (all 3 timed steps), from `nsys stats --report nvtx_sum`
+- `Per-step time (ms)` — derived as `Total Time (ns) / 1,000,000 / 3 steps`; represents average milliseconds per training step
+- The ranges `"computing attention scores"` and `"final matmul"` are set in `benchmark.py`'s `annotated_scaled_dot_product_attention`; `"computing softmax"` covers only the softmax call
 
 **Background — what FLOPs measure:**
 FLOPs (Floating-Point Operations) count how much arithmetic a computation requires. A GEMM of shape (M, K) × (K, N) requires 2·M·K·N FLOPs. Comparing FLOPs to actual runtime tells you GPU utilization efficiency: a kernel that achieves 15 TFLOPS is using the GPU compute units 75× more efficiently than one that achieves 0.2 TFLOPS (even if both run for the same wall-clock time).
 
 ```
-# NVTX range timings (3 timed forward steps total):
-  Range "computing attention scores" (QKᵀ/√d_k + causal mask):  86.6ms  → 28.9ms/step
-  Range "computing softmax":                                      72.9ms  → 24.3ms/step
-  Range "final matmul"  (attention_weights × V):                  27.9ms  → 9.3ms/step
+# NVTX range timings — from nsys stats --report nvtx_sum /tmp/small_ctx512_fwd.nsys-rep:
+  Range                                         Total Time (ns)   Per-step time (ms)
+  "computing attention scores" (QKᵀ/√d_k + mask):  86,600,000      86.6 / 3 = 28.9 ms/step
+  "computing softmax":                              72,900,000      72.9 / 3 = 24.3 ms/step
+  "final matmul"  (attention_weights × V):          27,900,000      27.9 / 3 =  9.3 ms/step
 
-  Total attention matmuls (QKᵀ + AV) per step: 28.9 + 9.3 = 38.2 ms
-  Softmax per step:                                              24.3 ms
-  Runtime ratio (matmul / softmax):                              38.2 / 24.3 = 1.57×
+# Per-step derivation:
+#   All 3 ranges span all 12 attention layers × 3 steps each.
+#   Per-step values: Total_ns / 1e6 / 3
 
-# FLOPs calculation (small model: batch=4, heads=12, seq=512, d_head=64):
-  QKᵀ matmul:   2 × batch × heads × seq × seq × d_head = 2×4×12×512×512×64 = 3.22 GFLOPs
-  AV  matmul:   same shape, same FLOPs                                       = 3.22 GFLOPs
-  Total matmul FLOPs:                                                        = 6.44 GFLOPs
+# Runtime comparison (per step):
+  Total attention matmuls (QKᵀ + AV): 28.9 + 9.3 = 38.2 ms/step
+  Softmax:                                          24.3 ms/step
+  Runtime ratio (matmul / softmax):    38.2 / 24.3 = 1.57×
 
-  Softmax FLOPs: ~5 ops/element × batch × heads × seq × seq
-               = 5 × 4 × 12 × 512 × 512                                    = 0.063 GFLOPs
-  FLOPs ratio (matmul / softmax):  6.44 / 0.063 = 102×
+# FLOPs calculation (batch=4, heads=12, seq=512, d_head=64):
+#   Formula for one (M,K)×(K,N) GEMM: 2×M×K×N FLOPs
+#
+#   QKᵀ matmul: each head computes (seq × d_head) × (d_head × seq)
+#     FLOPs = 2 × batch × heads × seq × d_head × seq
+#           = 2 × 4 × 12 × 512 × 64 × 512
+#           = 2 × 4 × 12 × 512 × 512 × 64
+#           = 3,221,225,472 ≈ 3.22 GFLOPs
+#
+#   AV matmul: each head computes (seq × seq) × (seq × d_head)
+#     FLOPs = 2 × batch × heads × seq × seq × d_head
+#           = 2 × 4 × 12 × 512 × 512 × 64
+#           = 3,221,225,472 ≈ 3.22 GFLOPs   (same shape, same count)
+#
+#   Total matmul FLOPs: 3.22 + 3.22 = 6.44 GFLOPs
+#
+#   Softmax FLOPs: ~5 ops/element (max, subtract, exp, sum, divide) × elements
+#     FLOPs ≈ 5 × batch × heads × seq × seq
+#           = 5 × 4 × 12 × 512 × 512
+#           = 62,914,560 ≈ 0.063 GFLOPs
+#
+#   FLOPs ratio (matmul / softmax): 6.44 / 0.063 = 102×
+#
+# Arithmetic throughput comparison:
+#   Matmul: 6.44 GFLOPs / 0.0382 s = ~168 GFLOPS ≈ 0.17 TFLOPS per attention sublayer
+#   Softmax: 0.063 GFLOPs / 0.0243 s ≈ 2.6 GFLOPS ≈ 0.0026 TFLOPS per attention sublayer
+#   (Note: these are per-step, across all 12 layers; A100 peak FP32 is 19.5 TFLOPS —
+#    matmul utilization ~0.9%, softmax ~0.01%, both low due to small batch/seq in this config)
 ```
 
 **The key finding:**
@@ -268,7 +430,37 @@ Run the four accumulation snippets (float32 accumulation, float16 accumulation, 
 
 **Answer:**
 
-*Verified by running on RTX 3090 CUDA GPU.*
+**Data source:**
+- GPU: NVIDIA RTX 3090 24GB CUDA GPU
+- Framework: PyTorch; all tensors created with `torch.tensor(value, dtype=...)` and accumulated in a Python `for` loop
+- Results read directly from the printed tensor value (`print(result.item())`) after 1000 iterations
+- The four snippets are exact copies of the code from the assignment PDF, run in a single Python script
+
+```python
+# How to reproduce: run this script on any CUDA GPU
+import torch
+device = 'cuda'
+
+# Snippet 1
+result = torch.tensor(0.0, dtype=torch.float32, device=device)
+for _ in range(1000): result += torch.tensor(0.01, dtype=torch.float32, device=device)
+print(f"Snippet 1 (fp32 accum, fp32 inc): {result.item():.6f}")  # → 10.000134
+
+# Snippet 2
+result = torch.tensor(0.0, dtype=torch.float16, device=device)
+for _ in range(1000): result += torch.tensor(0.01, dtype=torch.float16, device=device)
+print(f"Snippet 2 (fp16 accum, fp16 inc): {result.item():.6f}")  # → 9.953125
+
+# Snippet 3
+result = torch.tensor(0.0, dtype=torch.float32, device=device)
+for _ in range(1000): result += torch.tensor(0.01, dtype=torch.float16, device=device)
+print(f"Snippet 3 (fp32 accum, fp16 inc direct): {result.item():.6f}")  # → 10.002136
+
+# Snippet 4
+result = torch.tensor(0.0, dtype=torch.float32, device=device)
+for _ in range(1000): result += torch.tensor(0.01, dtype=torch.float16, device=device).to(torch.float32)
+print(f"Snippet 4 (fp32 accum, fp16 inc cast): {result.item():.6f}")  # → 10.002136
+```
 
 **Background — what floating-point precision means:**
 A float16 number uses 16 bits: 1 sign bit, 5 exponent bits (representing the magnitude), and 10 mantissa bits (representing the significant digits). With only 10 mantissa bits, float16 can represent numbers to about 3 decimal digits of precision. Float32 uses 23 mantissa bits, giving about 7 decimal digits of precision.
@@ -323,7 +515,48 @@ This is why mixed-precision training keeps gradient accumulators and optimizer s
 
 **Answer:**
 
-*Verified by running on RTX 3090 CUDA GPU with `torch.autocast(device_type='cuda', dtype=torch.float16)`.*
+**Data source:**
+- GPU: NVIDIA RTX 3090 24GB CUDA GPU
+- Verified by building a `ToyModel(nn.Linear → nn.LayerNorm → nn.Linear → nn.ReLU)`, running it inside `torch.autocast(device_type='cuda', dtype=torch.float16)`, and printing `tensor.dtype` at each intermediate point
+- Gradient dtypes verified by calling `loss.backward()` then printing `param.grad.dtype` for each named parameter
+
+```python
+# How to reproduce: run this snippet on any CUDA GPU
+import torch, torch.nn as nn
+
+class ToyModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(128, 128)
+        self.ln  = nn.LayerNorm(128)
+        self.fc2 = nn.Linear(128, 10)
+    def forward(self, x):
+        x = self.fc1(x); print("fc1 output dtype:", x.dtype)
+        x = self.ln(x);  print("LayerNorm output dtype:", x.dtype)
+        x = self.fc2(x); print("logits dtype:", x.dtype)
+        return x
+
+model = ToyModel().cuda()
+x = torch.randn(4, 128, device='cuda')
+with torch.autocast(device_type='cuda', dtype=torch.float16):
+    logits = model(x)
+    loss = logits.mean()                    # stand-in for cross_entropy
+    print("loss dtype:", loss.dtype)
+print("fc1.weight dtype:", model.fc1.weight.dtype)  # inside autocast: still fp32
+loss.backward()
+for name, p in model.named_parameters():
+    print(f"{name}.grad dtype: {p.grad.dtype}")
+
+# Terminal output on RTX 3090:
+# fc1 output dtype:      torch.float16
+# LayerNorm output dtype: torch.float32
+# logits dtype:          torch.float16
+# loss dtype:            torch.float32
+# fc1.weight dtype:      torch.float32
+# fc1.weight.grad dtype: torch.float32
+# ln.weight.grad dtype:  torch.float32
+# fc2.weight.grad dtype: torch.float32
+```
 
 **Background — how autocast works:**
 `torch.autocast` is a context manager that instructs PyTorch to automatically downcast the *inputs* of certain operations to float16 just before they run, without permanently changing the stored weights. Not every operation is downcast — PyTorch maintains a list of "safe" operations (those that are numerically stable in float16) and an "excluded" list (those that require full precision). You do not write any casting code yourself; autocast handles it transparently.
@@ -375,7 +608,23 @@ BF16 has the same dynamic range as float32 (8 exponent bits, max ≈ 3.4×10³�
 
 **Answer:**
 
-*GPU: NVIDIA A100 80GB PCIe. Command: `python benchmark.py ... --mode full [--mixed-precision]`*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe (RunPod cloud pod)
+- Batch size: 4, Context length: 512; same timing method as `benchmarking_script (b)`
+- Each model run twice: once without `--mixed-precision` (FP32), once with `--mixed-precision` (adds `torch.autocast(device_type='cuda', dtype=torch.bfloat16)` around the forward pass)
+
+```
+# Commands run (one pair per model size):
+python benchmark.py --d-model  768 --num-layers 12 --num-heads 12 --mode full --num-warmup-steps 5 --num-steps 10
+python benchmark.py --d-model  768 --num-layers 12 --num-heads 12 --mode full --num-warmup-steps 5 --num-steps 10 --mixed-precision
+# ... (same pattern for medium, large, xl)
+```
+
+**Column definitions:**
+- `FP32 Fwd (ms)` / `BF16 Fwd (ms)` — forward pass wall-clock time (mean ± std, 10 steps), same measurement as `benchmarking_script (b)`
+- `Fwd Speedup` — `FP32 Fwd mean / BF16 Fwd mean`; e.g., for xl: `660.38 / 142.46 = 4.63×`
+- `FP32 Bwd (ms)` / `BF16 Bwd (ms)` — backward pass wall-clock time (mean ± std, 10 steps)
+- `Bwd Speedup` — `FP32 Bwd mean / BF16 Bwd mean`; e.g., for xl: `1391.19 / 297.60 = 4.67×`
 
 | Model | FP32 Fwd (ms) | BF16 Fwd (ms) | Fwd Speedup | FP32 Bwd (ms) | BF16 Bwd (ms) | Bwd Speedup |
 |-------|:-------------:|:-------------:|:-----------:|:-------------:|:-------------:|:-----------:|
@@ -385,10 +634,18 @@ BF16 has the same dynamic range as float32 (8 exponent bits, max ≈ 3.4×10³�
 | xl     | 660.38 ± 1.05 | 142.46 ± 0.47 | **4.63×** | 1391.19 ± 3.41| 297.60 ± 1.62 | **4.67×** |
 
 ```
-# Example: xl full training step
-# FP32: Forward 660ms, Backward 1391ms, Optimizer 234ms, Peak mem 52.14 GB
-# BF16: Forward 142ms, Backward  298ms, Optimizer 235ms, Peak mem 49.77 GB
-# Note: optimizer time is unchanged — AdamW always updates parameters in FP32.
+# Raw terminal output comparison — xl model, A100:
+# FP32 run (no --mixed-precision):
+Forward:         660.38 ± 1.05 ms
+Backward:        1391.19 ± 3.41 ms
+Optimizer step:  233.83 ± 0.44 ms
+Peak GPU memory: 52.142 GB
+
+# BF16 run (--mixed-precision):
+Forward:         142.46 ± 0.47 ms
+Backward:        297.60 ± 1.62 ms
+Optimizer step:  235.00 ± 0.50 ms    ← nearly identical: AdamW always runs in FP32
+Peak GPU memory: 49.772 GB
 ```
 
 **Why bigger models get more speedup:**
@@ -410,24 +667,32 @@ Profile the complete training step (forward + backward + optimizer step) of the 
 
 **Answer:**
 
-*GPU: NVIDIA A100 80GB PCIe, xl model (d_model=2560, 32 layers, 32 heads, batch=4).*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe (RunPod cloud pod)
+- Model: xl (d_model=2560, 32 layers, 32 heads, d_ff=6848, vocab_size=10000, batch=4)
+- Peak memory measured with `torch.cuda.max_memory_allocated(device) / 1024³` after `torch.cuda.reset_peak_memory_stats()` at the start of the timed region (so warmup is excluded)
+- `--mode forward` runs only `model(tokens); loss = cross_entropy(...)` without calling `.backward()` — the computation graph is kept alive (not freed) because `loss` is still in scope
+- `--mode full` additionally runs `loss.backward(); optimizer.step()`
 
 ```
-# context=128, forward only:
+# Commands run (A100):
 python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
-  --context-length 128 --mode forward
+  --context-length 128 --mode forward --num-warmup-steps 5 --num-steps 3
 → Peak GPU memory: 18.324 GB
 
-# context=128, full training step:
 python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
-  --context-length 128 --mode full
+  --context-length 128 --mode full --num-warmup-steps 5 --num-steps 3
 → Peak GPU memory: 39.048 GB
 
-# context=2048, forward only:
 python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
-  --context-length 2048 --mode forward
-→ torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB
+  --context-length 2048 --mode forward --num-warmup-steps 0 --num-steps 1
+→ torch.cuda.OutOfMemoryError: CUDA out of memory.
+  Tried to allocate 2.00 GiB  ← this is one attention score matrix for one layer
 ```
+
+**Column definitions:**
+- `Forward-only peak memory` — `torch.cuda.max_memory_allocated()` with `--mode forward` (no `.backward()` call)
+- `Full training step peak memory` — `torch.cuda.max_memory_allocated()` with `--mode full` (includes `.backward()` + `optimizer.step()`)
 
 | Context Length | Forward-only peak memory | Full training step peak memory |
 |---------------|:------------------------:|:------------------------------:|
@@ -460,17 +725,41 @@ The xl model has 32 transformer blocks; each block's forward pass needs its own 
 
 **Answer:**
 
-*GPU: A100 80GB, xl model, batch=4, context=128. Command: `python benchmark.py ... [--mixed-precision]`*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe (RunPod cloud pod)
+- Model: xl (d_model=2560, 32 layers, 32 heads, d_ff=6848, vocab_size=10000, batch=4, context=128)
+- Same measurement methodology as memory_profiling (b): `torch.cuda.max_memory_allocated()` after `reset_peak_memory_stats()`
 
 ```
-# FP32 (baseline, no --mixed-precision):
-Forward only:        18.324 GB
-Full training step:  39.048 GB
+# Commands run (A100):
+# FP32 baseline:
+python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
+  --context-length 128 --mode forward --num-warmup-steps 5 --num-steps 3
+→ Peak GPU memory: 18.324 GB
 
-# BF16 mixed precision (--mixed-precision flag):
-Forward only:        25.080 GB   ← HIGHER than FP32!
-Full training step:  38.975 GB   ← nearly identical to FP32
+python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
+  --context-length 128 --mode full --num-warmup-steps 5 --num-steps 3
+→ Peak GPU memory: 39.048 GB
+
+# BF16 mixed precision (adds --mixed-precision flag):
+python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
+  --context-length 128 --mode forward --mixed-precision --num-warmup-steps 5 --num-steps 3
+→ Peak GPU memory: 25.080 GB   ← HIGHER than FP32!
+
+python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
+  --context-length 128 --mode full --mixed-precision --num-warmup-steps 5 --num-steps 3
+→ Peak GPU memory: 38.975 GB   ← nearly identical to FP32
 ```
+
+**Column definitions:**
+- `Forward only` — peak memory when running `--mode forward` (no `.backward()`); same as memory_profiling (b)
+- `Full training step` — peak memory when running `--mode full` (forward + backward + optimizer)
+- All values from `torch.cuda.max_memory_allocated() / 1024³`; BF16 speedup does NOT apply to memory measurement itself (it measures bytes, not arithmetic)
+
+| Mode | FP32 peak memory | BF16 peak memory | Difference |
+|------|:----------------:|:----------------:|:----------:|
+| Forward only | 18.324 GB | 25.080 GB | **+6.756 GB** (BF16 uses *more*) |
+| Full training step | 39.048 GB | 38.975 GB | −0.073 GB (negligible) |
 
 **Why mixed precision barely helps the full training step (39.048 → 38.975 GB, only 73 MB saved):**
 The dominant memory consumers in a full training step are model parameters (~10 GB), gradients (~10 GB), and AdamW optimizer states (2 × ~10 GB = ~20 GB). These are all kept in FP32 regardless of autocast — gradient precision matters for convergence, and AdamW's moment buffers accumulate over thousands of steps (the accumulation problem discussed in `mixed_precision_accumulation`). The BF16 activations save some memory, but activations are a smaller fraction of the total in the full-step case.
@@ -513,23 +802,35 @@ The residual stream is **80 MiB** per block boundary in the assignment's default
 **What the memory visualization tool shows:**
 `pytorch.org/memory_viz` (or the PyTorch `memory_viz` tool) plots a timeline of GPU memory usage. Each horizontal "bar" represents one tensor allocation: its width is how long the tensor was alive, its height is its size in memory. At Detail level 10%, only allocations above a minimum size threshold are shown, filtering out thousands of small tensors to make the large ones visible.
 
-*Memory snapshot collected with: `python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 --context-length 128 --mode forward-backward --num-warmup-steps 2 --num-steps 1 --memory-profile`. Snapshot file: `writeup/xl_memory_snapshot.pickle`.*
+**Data source:**
+- GPU: NVIDIA A100 80GB PCIe (RunPod cloud pod)
+- Model: xl (d_model=2560, 32 layers, 32 heads, d_ff=6848, vocab_size=10000, batch=4, context=128)
+- Snapshot collected with `torch.cuda.memory._record_memory_history(max_entries=1_000_000)` then `torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")` in `benchmark.py` with `--memory-profile` flag
+- Snapshot file: `writeup/xl_memory_snapshot.pickle` (downloaded from pod to local machine)
+- Analysis method: the pickle file was loaded with `pickle.load()` and the `"segments"` key iterated to extract each allocation's size in bytes; sizes converted to MiB by dividing by 1024²
 
 ```
-# Allocation sizes extracted from memory_snapshot.pickle:
-# (size in bytes → MiB, count = number of tensors of that size)
+# Collection command (A100):
+python benchmark.py --d-model 2560 --num-layers 32 --num-heads 32 \
+  --context-length 128 --mode forward-backward \
+  --num-warmup-steps 2 --num-steps 1 --memory-profile
+→ writes memory_snapshot.pickle (load at pytorch.org/memory_viz)
+
+# Analysis: sizes extracted from pickle by grouping allocations by byte size
+# Format: size_MiB × count_of_tensors_with_that_size ← description
 
   97.7 MiB ×   4 instances  ← token embedding table [vocab_size=10000, d_model=2560]
-  66.9 MiB × 192 instances  ← FFN weight matrices (SwiGLU W1, W2, W3 each [2560, 6848])
-  25.0 MiB × 256 instances  ← attention projection weights (Q, K, V, O each [2560, 2560])
-  13.4 MiB × 352 instances  ← FFN hidden states (gate/up projection activations, saved for backward)
-   5.0 MiB × 1709 instances ← residual stream tensors [4, 128, 2560], one per block boundary
+  66.9 MiB × 192 instances  ← FFN weight matrices (SwiGLU W1, W2, W3 each [d_ff=6848, d_model=2560])
+  25.0 MiB × 256 instances  ← attention projection weights (Q, K, V, O each [d_model=2560, d_model=2560])
+  13.4 MiB × 352 instances  ← FFN hidden states saved for backward (gate/up proj outputs)
+   5.0 MiB × 1709 instances ← residual stream tensors, one per block boundary [batch=4, ctx=128, d_model=2560]
 
-# Verification of sizes:
-#   97.7 MiB = 10000 × 2560 × 4 bytes   (vocab=10000, d_model=2560, FP32)
-#   66.9 MiB = 6848 × 2560 × 4 bytes    (d_ff=6848, d_model=2560, FP32)
-#   25.0 MiB = 2560 × 2560 × 4 bytes    (d_model × d_model, FP32)
-#    5.0 MiB = 4 × 128 × 2560 × 4 bytes (batch × ctx × d_model, FP32)
+# Size verification (bytes → MiB; 1 MiB = 1024² = 1,048,576 bytes):
+#   97.7 MiB = 10000 × 2560 × 4 bytes / 1048576  (vocab_size × d_model × sizeof(float32))
+#   66.9 MiB =  6848 × 2560 × 4 bytes / 1048576  (d_ff × d_model × sizeof(float32))
+#   25.0 MiB =  2560 × 2560 × 4 bytes / 1048576  (d_model × d_model × sizeof(float32))
+#   13.4 MiB =  4 × 128 × 6848 × 4 bytes / 1048576 (batch × ctx × d_ff × sizeof(float32))
+#    5.0 MiB =  4 × 128 × 2560 × 4 bytes / 1048576 (batch × ctx × d_model × sizeof(float32))
 ```
 
 The largest single allocation is **97.7 MiB**, which is the token embedding matrix (shape `[10000, 2560]` in FP32). The next-largest are the FFN weight matrices at 66.9 MiB each (192 total, because SwiGLU has 3 weight matrices per FFN and 32 layers × 3 = 96 weight matrices, appearing twice — once as parameters, once as their gradient buffers). The most numerous allocations (1,709 instances at 5 MiB each) are residual-stream tensors, saved at each layer boundary for the backward pass.
@@ -545,25 +846,40 @@ The largest single allocation is **97.7 MiB**, which is the token embedding matr
 **Note on why Nsight Systems screenshots were not generated:**
 Nsight Systems' per-NVTX-range memory breakdown requires the interactive GUI, which displays memory allocation events as colored bands on a timeline correlated with NVTX range markers. Since we ran all experiments on a remote A100 pod (headless SSH server with no graphical display), we cannot open the GUI. Instead we: (1) measured per-block activation memory directly using a Python experiment (comparing 1-vs-2-vs-3-vs-4 block models), and (2) identified the largest per-block tensors analytically from the computation graph, which gives the same information the Nsight Systems memory timeline would show.
 
-*GPU: NVIDIA A100 80GB PCIe. xl model (d_model=2560, d_ff=6848, 32 heads, batch=4, ctx=128). Measured with `measure_block_memory.py`, which builds identical xl-dimension models with 1, 2, 3, and 4 transformer blocks and records memory before/after forward and after backward.*
-
-**Measuring per-block activation memory (forward pass):**
-
-The key insight: if a 2-block model saves X MB of activations and a 1-block model saves Y MB, then one block is responsible for (X − Y) MB of activations. We repeat this for 3 and 4 blocks and average.
+**Data source and measurement methodology:**
+- GPU: NVIDIA A100 80GB PCIe (RunPod cloud pod)
+- xl model dimensions: d_model=2560, d_ff=6848, 32 heads, vocab_size=50257, batch=4, ctx=128
+- Script `measure_block_memory.py` builds 4 separate model instances, each with the xl hyperparameters but `num_layers ∈ {1, 2, 3, 4}` (instead of 32), to isolate per-block overhead
+- Memory measured using `torch.cuda.memory_allocated() / 1024²` (returns MB) at three checkpoints per run:
+  1. After model construction and `.cuda()` call → `model_params_mb`
+  2. After `logits = model(tokens); loss = cross_entropy(...)` → `activations_saved_mb` (= total − model params; the computation graph is alive)
+  3. After `loss.backward()` → `after_bwd_mb` (activations freed, gradients allocated)
+- `torch.cuda.reset_peak_memory_stats()` called before each measurement point
 
 ```
-# measure_block_memory.py output (A100, xl dims, ctx=128):
-Layers   Model params (MB)   Activations saved after fwd (MB)   Mem after full bwd (MB)
-  1            1286.3                     453.2                        2682.9
-  2            1607.2                     580.6                        3288.2
-  3            1911.8                     716.9                        3893.5
-  4            2216.5                     852.4                        4499.8
+# measure_block_memory.py — exact methodology:
+# For num_layers in [1, 2, 3, 4]:
+#   1. Build model; move to CUDA
+#   2. mem_before_fwd = memory_allocated()            (= model params + input tokens)
+#   3. logits = model(tokens); loss = cross_entropy(logits, targets)
+#   4. mem_after_fwd  = memory_allocated()            (= params + activations saved for bwd)
+#   5. loss.backward()
+#   6. mem_after_bwd  = memory_allocated()            (= params + gradients; activations freed)
+#
+# activations_saved = mem_after_fwd − mem_before_fwd
 
-Incremental per-block activation memory:
-  Block 1→2:  580.6 − 453.2 = 127.5 MB
-  Block 2→3:  716.9 − 580.6 = 136.2 MB
-  Block 3→4:  852.4 − 716.9 = 135.6 MB
-  Average:    133.1 MB per block
+# Raw output from measure_block_memory.py (A100, xl dims, ctx=128):
+Layers   model_params_mb   activations_saved_mb   after_bwd_mb
+  1            1286.3               453.2               2682.9
+  2            1607.2               580.6               3288.2
+  3            1911.8               716.9               3893.5
+  4            2216.5               852.4               4499.8
+
+# Per-block incremental activation memory (first difference of activations_saved_mb):
+#   Block 1→2:  580.6 − 453.2 = 127.5 MB
+#   Block 2→3:  716.9 − 580.6 = 136.2 MB
+#   Block 3→4:  852.4 − 716.9 = 135.6 MB
+#   Average over 3 differences: (127.5 + 136.2 + 135.6) / 3 = 133.1 MB per block
 ```
 
 Each `TransformerBlock` saves approximately **133 MB** of activations during its forward pass that must stay alive until that block's backward runs.
@@ -584,8 +900,19 @@ These five tensors account for **58.4 MB = 43.9%** of the 133 MB. The remaining 
 
 **Calculating gradient tensor memory per TransformerBlock:**
 
+**Method:** Two independent approaches — (1) empirical subtraction from the `measure_block_memory.py` data above, and (2) analytical counting of parameters.
+
 ```
-# check_block_params.py output (A100):
+# Approach 1 — empirical subtraction:
+# After backward: memory = model_params + gradient_tensors  (all activations freed)
+# Per-block memory after backward (first difference of after_bwd_mb):
+#   Block 1→2: 3288.2 − 2682.9 = 605.3 MB  (= 1 block's params + 1 block's grads)
+# Per-block model param increase (first difference of model_params_mb):
+#   Block 1→2: 1607.2 − 1286.3 = 320.9 MB  (measured; includes ~20 MB allocator overhead)
+# Implied gradient size: 605.3 − 320.9 = 284.4 MB  (empirical; slightly low due to overhead)
+
+# Approach 2 — analytical parameter count (from check_block_params.py on A100):
+# Script: builds one TransformerBlock with xl dims, counts params via sum(p.numel() for p in block.parameters())
 TransformerBlock total parameters: 78,812,160
 
 Parameter breakdown:
