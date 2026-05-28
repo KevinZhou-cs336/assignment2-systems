@@ -8,6 +8,7 @@ point for four assignment problems:
   §2.1.4  nsys_profile               — NVTX annotations for nsys profiler
   §2.1.5  benchmarking_mixed_precision — BF16 autocast benchmarking
   §2.1.6  memory_profiling           — PyTorch memory snapshot
+  §4      torch_compile (b)          — compiled vs vanilla Transformer
 
 Usage examples
 --------------
@@ -22,6 +23,9 @@ Usage examples
 
   # BF16 mixed-precision run (§2.1.5):
   python -m cs336_systems.benchmark --mixed-precision
+
+  # Compiled model (§4 torch_compile b):
+  python -m cs336_systems.benchmark --compile
 
   # Annotate for nsys profiler (§2.1.4):
   uv run nsys profile -- python -m cs336_systems.benchmark --nvtx
@@ -238,6 +242,20 @@ def parse_args() -> argparse.Namespace:
              "Open the file at pytorch.org/memory_viz to inspect it.",
     )
 
+    # ── §4  torch.compile ─────────────────────────────────────────────────────
+    # torch.compile() traces the model and emits optimized GPU kernels via the
+    # Inductor backend (Triton under the hood).  Key benefits:
+    #   - Fuses consecutive elementwise ops (softmax, residual, RMSNorm) into
+    #     single kernels, reducing memory round-trips.
+    #   - Can exploit Tensor Cores more aggressively in BF16.
+    # The first forward pass triggers compilation and is slower; warmup steps
+    # absorb this cost so the timed region only sees steady-state performance.
+    bench.add_argument(
+        "--compile",
+        action="store_true",
+        help="Wrap the model with torch.compile() before benchmarking (§4 torch_compile b).",
+    )
+
     args = parser.parse_args()
 
     # Compute d_ff default: nearest multiple of 64 to (8/3)·d_model.
@@ -326,6 +344,10 @@ def main() -> None:
     # roughly tripling the memory footprint of the parameters.
     # We only instantiate it when the optimizer step is actually being timed.
     optimizer = AdamW(model.parameters(), lr=1e-3) if args.mode == "full" else None
+
+    # ── §4  torch.compile ────────────────────────────────────────────────────
+    if args.compile:
+        model = torch.compile(model)
 
     # ── §2.1.5  Precision context ─────────────────────────────────────────────
     # torch.autocast automatically casts matmuls and convolutions to bfloat16
@@ -481,8 +503,9 @@ def main() -> None:
     # =========================================================================
     fwd_mean, fwd_std = _mean_and_std(forward_times_ms)
 
-    print(f"\nMode:            {args.mode}"
-          f"{'  [BF16 mixed precision]' if args.mixed_precision else ''}")
+    compile_tag = "  [torch.compile]" if args.compile else ""
+    precision_tag = "  [BF16 mixed precision]" if args.mixed_precision else ""
+    print(f"\nMode:            {args.mode}{compile_tag}{precision_tag}")
     print(f"Forward:         {fwd_mean:.2f} ± {fwd_std:.2f} ms")
 
     total_mean_ms = fwd_mean
